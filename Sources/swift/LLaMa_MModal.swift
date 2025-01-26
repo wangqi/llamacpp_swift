@@ -4,7 +4,7 @@
 
 import Foundation
 import llama
-import llmfarm_core_cpp
+import llamacpp_swift_cpp
 
 var LLaMaMM_obj:LLaMa_MModal? = nil
 

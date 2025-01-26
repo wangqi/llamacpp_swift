@@ -38,12 +38,12 @@ var linkerSettings: [LinkerSetting] = [
 ]
 
 let package = Package(
-    name: "llmfarm_core",
+    name: "llamacpp_swift",
     platforms: [.macOS(.v12),.iOS(.v15)],
     products: [
         .library(
-            name: "llmfarm_core",
-            targets: ["llmfarm_core"])
+            name: "llamacpp_swift",
+            targets: ["llamacpp_swift"])
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -51,14 +51,14 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "llmfarm_core_cpp",
+            name: "llamacpp_swift_cpp",
             dependencies: [
               .product(name: "llama", package: "llama.cpp")
             ],
-            path: "Sources/llmfarm_core_cpp",
-            exclude: ["spm-headers"],
+            path: "Sources/cpp",
             sources: [
                 "exception_helper_objc.mm", 
+                "package_helper.m", 
                 //"exception_helper.cpp",
             ],
             publicHeadersPath: "include",
@@ -66,12 +66,12 @@ let package = Package(
             linkerSettings: linkerSettings
         ),
         .target(
-              name: "llmfarm_core",
+              name: "llamacpp_swift",
               dependencies: [
-                "llmfarm_core_cpp",
+                "llamacpp_swift_cpp",
                 .product(name: "llama", package: "llama.cpp")
               ],
-              path: "Sources/llmfarm_core"
+              path: "Sources/swift"
         )
     ],
     

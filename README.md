@@ -1,5 +1,3 @@
-**The code in this repository is under constant revision/refactoring. You could say that I am learning Swift as I develop LLMFarm. So don't expect too much from the code you'll find here. 
-If you have any useful comments on the code, its style or architecture, I will be glad to hear them.**
 
 # LLMFarm_core.swift Fork
 This is a modified fork of [LLMFarm_core.swift](https://github.com/guinmoon/llmfarm_core.swift) with a key architectural change: it uses llama.cpp as an external package dependency instead of including it in the source directory. This decoupling makes the codebase cleaner and easier to maintain.

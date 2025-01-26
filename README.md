@@ -1,9 +1,10 @@
 **The code in this repository is under constant revision/refactoring. You could say that I am learning Swift as I develop LLMFarm. So don't expect too much from the code you'll find here. 
 If you have any useful comments on the code, its style or architecture, I will be glad to hear them.**
 
-# LLMFarm_core.swift
-LLMFarm_core swift library to work with large language models (LLM). It allows you to load different LLMs with certain parameters.<br>
-Based on [ggml](https://github.com/ggerganov/ggml) and [llama.cpp](https://github.com/ggerganov/llama.cpp) by [Georgi Gerganov](https://github.com/ggerganov).
+# LLMFarm_core.swift Fork
+This is a modified fork of [LLMFarm_core.swift](https://github.com/guinmoon/llmfarm_core.swift) with a key architectural change: it uses llama.cpp as an external package dependency instead of including it in the source directory. This decoupling makes the codebase cleaner and easier to maintain.
+
+The library allows you to work with large language models (LLM) on Apple platforms. It is based on [ggml](https://github.com/ggerganov/ggml) and [llama.cpp](https://github.com/ggerganov/llama.cpp) by [Georgi Gerganov](https://github.com/ggerganov).
 
 # Features
 
@@ -33,34 +34,29 @@ See full list [here](https://github.com/ggerganov/llama.cpp).
 
 
 # Installation
-```
-git clone https://github.com/guinmoon/llmfarm_core.swift
+
+```bash
+git clone https://github.com/wangqi/llamacpp_swift/
 ```
 
 ## Swift Package Manager
 
-Add `llmfarm_core` to your project using Xcode (File > Add Packages...) or by adding it to your project's `Package.swift` file:
+Add `llamacpp_swift` to your project using Xcode (File > Add Packages...) or by adding it to your project's `Package.swift` file:
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/guinmoon/llmfarm_core.swift")
+    .package(url: "https://github.com/wangqi/llamacpp_swift", branch: "main")
 ]
 ```
 
+The package automatically manages the llama.cpp dependency, so you don't need to include it separately.
+
 ## Build and Debug 
 
-To Debug `llmfarm_core` package, do not forget to comment `.unsafeFlags(["-Ofast"])` in `Package.swift`.
+To Debug `llamacpp_swift` package, do not forget to comment `.unsafeFlags(["-Ofast"])` in `Package.swift`.
 Don't forget that the debug version is slower than the release version.
 
 # Usage
 
 ## [See examples in the Demo Project](/DemoProject)
 
-## Also used sources from:
-* [rwkv.cpp](https://github.com/saharNooby/rwkv.cpp) by [saharNooby](https://github.com/saharNooby).
-* [Mia](https://github.com/byroneverson/Mia) by [byroneverson](https://github.com/byroneverson).
-* [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) by [gonzalezreal](https://github.com/gonzalezreal)
-
-## Projects based on this library
- * ### [LLM Farm](https://github.com/guinmoon/LLMFarm)
-App to run LLaMA and other large language models locally on iOS and MacOS.

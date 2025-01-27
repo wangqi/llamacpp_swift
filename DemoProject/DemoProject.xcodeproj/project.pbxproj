@@ -12,6 +12,10 @@
 		151746EA2B696C2A0074FF35 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E72B696C2A0074FF35 /* Metal.framework */; };
 		151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E82B696C2A0074FF35 /* MetalKit.framework */; };
 		151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E92B696C2A0074FF35 /* MetalPerformanceShaders.framework */; };
+		3041EE4A2D478E44004FAAA1 /* TestCombineStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE472D478E44004FAAA1 /* TestCombineStream.swift */; };
+		3041EE4B2D478E44004FAAA1 /* TestPredict.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE482D478E44004FAAA1 /* TestPredict.swift */; };
+		3041EE4C2D478E44004FAAA1 /* TestCallbackStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE462D478E44004FAAA1 /* TestCallbackStream.swift */; };
+		3041EE4D2D478E44004FAAA1 /* TestStructuredStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */; };
 		30C25D302D475E0A00FFE474 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 30C25D2F2D475E0A00FFE474 /* llama */; };
 		30C25D332D475E1400FFE474 /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30C25D322D475E1400FFE474 /* llamacpp_swift */; };
 /* End PBXBuildFile section */
@@ -35,6 +39,10 @@
 		151746E72B696C2A0074FF35 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		151746E82B696C2A0074FF35 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		151746E92B696C2A0074FF35 /* MetalPerformanceShaders.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalPerformanceShaders.framework; path = System/Library/Frameworks/MetalPerformanceShaders.framework; sourceTree = SDKROOT; };
+		3041EE462D478E44004FAAA1 /* TestCallbackStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCallbackStream.swift; sourceTree = "<group>"; };
+		3041EE472D478E44004FAAA1 /* TestCombineStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCombineStream.swift; sourceTree = "<group>"; };
+		3041EE482D478E44004FAAA1 /* TestPredict.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestPredict.swift; sourceTree = "<group>"; };
+		3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStructuredStream.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +82,10 @@
 		151746D92B6968EA0074FF35 /* DemoProject */ = {
 			isa = PBXGroup;
 			children = (
+				3041EE462D478E44004FAAA1 /* TestCallbackStream.swift */,
+				3041EE472D478E44004FAAA1 /* TestCombineStream.swift */,
+				3041EE482D478E44004FAAA1 /* TestPredict.swift */,
+				3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */,
 				151746DA2B6968EA0074FF35 /* main.swift */,
 			);
 			path = DemoProject;
@@ -156,6 +168,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3041EE4A2D478E44004FAAA1 /* TestCombineStream.swift in Sources */,
+				3041EE4B2D478E44004FAAA1 /* TestPredict.swift in Sources */,
+				3041EE4C2D478E44004FAAA1 /* TestCallbackStream.swift in Sources */,
+				3041EE4D2D478E44004FAAA1 /* TestStructuredStream.swift in Sources */,
 				151746DB2B6968EA0074FF35 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

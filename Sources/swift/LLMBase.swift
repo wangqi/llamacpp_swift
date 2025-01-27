@@ -489,13 +489,13 @@ public class LLMBase {
             case .failure(let error):
                 //Handle chunk error here
             }
-        } completion: { error, output, processing_time in
+        } completion: { output, processing_time, chunk in
             //Handle streaming error here with final output and processing time
         }
     */
     public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil,
                           onPartialResult: @escaping (ChatStreamResult) -> Void,
-                          completion: @escaping (Error?, String, Double) -> Void) {
+                          completion: @escaping (String, Double, Error?) -> Void) {
         do {
             let startTime = Date()
             let contextLength = Int32(self.contextParams.context)
@@ -510,7 +510,7 @@ public class LLMBase {
             
             var inputTokens = try self.tokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
             if inputTokens.count == 0 && (img_path ?? "").isEmpty {
-                completion(ModelError.emptyInput, "", 0)
+                completion("", 0, ModelError.emptyInput)
                 return
             }
             
@@ -561,9 +561,10 @@ public class LLMBase {
                     output_cache.append(str)
                     full_output.append(str)
                     if output_cache.count >= self.contextParams.predict_cache_length {
-                        let cached_content = output_cache.joined()
+                        let chunk = output_cache.joined()
                         output_cache = []
-                        onPartialResult(.success(ModelResult(choices: [cached_content])))
+                        onPartialResult(.success(ModelResult(choices: [chunk])))
+                        // also append to full_output for final usage
                     }
                 }
                 
@@ -597,18 +598,18 @@ public class LLMBase {
             
             // Send any remaining cached output
             if !output_cache.isEmpty {
-                let cached_content = output_cache.joined()
-                full_output.append(contentsOf: output_cache)
-                onPartialResult(.success(ModelResult(choices: [cached_content])))
+                let chunk = output_cache.joined()
+                full_output.append(chunk)
+                onPartialResult(.success(ModelResult(choices: [chunk])))
             }
             
             let endTime = Date()
             let processingTime = endTime.timeIntervalSince(startTime) * 1000 // Convert to milliseconds
             
             print("Total tokens: \(inputTokensCount + full_output.count) (\(inputTokensCount) -> \(full_output.count))")
-            completion(nil, full_output.joined(), processingTime)
+            completion(full_output.joined(), processingTime, nil)
         } catch {
-            completion(error, "", 0)
+            completion("", 0, error)
         }
     }
     
@@ -631,7 +632,7 @@ public class LLMBase {
                 case .failure(let error):
                     promise(.failure(error))
                 }
-            } completion: { error, output, processingTime in
+            } completion: { output, processingTime, error in
                 if let error = error {
                     promise(.failure(error))
                 }
@@ -654,7 +655,7 @@ public class LLMBase {
                 case .failure(let error):
                     continuation.finish(throwing: error)
                 }
-            } completion: { error, output, processingTime in
+            } completion: { output, processingTime, error in
                 if let error = error {
                     continuation.finish(throwing: error)
                 } else {

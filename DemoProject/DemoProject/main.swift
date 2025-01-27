@@ -73,9 +73,9 @@ if let model = ai.model {
         case .failure(let error):
             print("ERROR: \(error)")
         }
-    } completion: { error, final_string, seconds in
+    } completion: { final_string, processing_time, error in
         //Handle streaming error here
         print(final_string)
-        print("Final Answer in \(seconds) ms")
+        print("Final Answer in \(processing_time) ms")
     }
 }

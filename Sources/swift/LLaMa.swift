@@ -309,13 +309,14 @@ public class LLaMa: LLMBase {
     }
     
     public override func llm_tokenize(_ input: String, add_bos: Bool?, parse_special:Bool?) -> [ModelToken] {
+        print("LLaMa tokenize: input \(input), add_bos: \(add_bos), parse_special: \(parse_special)")
         if input.count == 0 {
             return []
         }
-        print("input \(input)")
-        let n_tokens = Int32(input.utf8.count) + (self.contextParams.add_bos_token == true ? 1 : 0)
-        var embeddings: [llama_token] = Array<llama_token>(repeating: llama_token(), count: input.utf8.count)
-        let n:Int32 = llama_tokenize(self.model, input, Int32(input.utf8.count), &embeddings, n_tokens,
+        let utf8_count = input.utf8.count
+        let n_tokens = Int32(utf8_count) + (self.contextParams.add_bos_token == true ? 1 : 0)
+        var embeddings: [llama_token] = Array<llama_token>(repeating: llama_token(), count: utf8_count)
+        let n:Int32 = llama_tokenize(self.model, input, Int32(utf8_count), &embeddings, n_tokens,
                                      add_bos ?? self.contextParams.add_bos_token,
                                      parse_special ?? self.contextParams.parse_special_tokens)
         if n<=0{

@@ -595,6 +595,7 @@ public enum ModelError: Error {
     case inputTooLong
     case failedToEval
     case contextLimit
+    case emptyInput
 }
 
 public enum ModelPromptStyle {

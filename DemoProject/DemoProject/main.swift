@@ -22,7 +22,7 @@ func mainCallback(_ str: String, _ time: Double) -> Bool {
 
 
 //load model
-let modelPath = "/Users/wangqi/disk/projects/ai/models/Dolphin3.0-Qwen2.5-3b-Q4_K_M.gguf"
+let modelPath = "/Users/wangqi/disk/projects/ai/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
 let ai = AI(_modelPath: modelPath,_chatName: "chat")
 print("Load model: \(modelPath)")
 var params: ModelAndContextParams = .default
@@ -30,11 +30,9 @@ var params: ModelAndContextParams = .default
 //set custom prompt format
 params.promptFormat = .Custom
 params.custom_prompt_format = """
-SYSTEM: You are a helpful, respectful and honest assistant.
-USER: {prompt}
-ASSISTANT:
+<|User|>{prompt}<|Assistant|>
 """
-var input_text = "State the meaning of life"
+var input_text = "What is the meaning of life?"
 params.use_metal = true
 print("Model Params: \(params)")
 
@@ -57,5 +55,27 @@ ai.model?.sampleParams.mirostat_tau = 5.0
 
 try ai.loadModel_sync()
 //eval with callback
-let output = try? ai.model?.predict(input_text, mainCallback)
+//let output = try? ai.model?.predict(input_text, mainCallback)
 
+//Structured concurrency
+// if let model = ai.model {
+//     for try await result in model.chatsStream(input: input_text) {
+//         print(result.choices)
+//     }
+// }
+
+if let model = ai.model {
+    model.chatsStream(input: input_text) { partialResult in
+        switch partialResult {
+        case .success(let result):
+//            print(result.choices)
+            print("continue thinking...")
+        case .failure(let error):
+            print("ERROR: \(error)")
+        }
+    } completion: { error, final_string, seconds in
+        //Handle streaming error here
+        print(final_string)
+        print("Final Answer in \(seconds) ms")
+    }
+}

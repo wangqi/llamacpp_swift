@@ -5,6 +5,7 @@
 import Foundation
 import llama
 import llamacpp_swift_cpp
+import Combine
 
 public enum ModelLoadError: Error {
     case modelLoadError
@@ -464,5 +465,202 @@ public class LLMBase {
     
     public func llm_tokenize(_ input: String, add_bos: Bool? = nil, parse_special:Bool? = nil) -> [ModelToken] {
         return []
+    }
+    
+    //MARK: chatsStream for Closures, Combine and Structured concurrency
+    
+    // Result type for streaming chat responses
+    public enum ChatStreamResult {
+        case success(ModelResult)
+        case failure(Error)
+    }
+
+    // Model result type containing choices
+    public struct ModelResult {
+        public let choices: [String]
+    }
+
+    // Closure-based streaming chat function
+    /*
+        llm.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { partialResult in
+        switch partialResult {
+            case .success(let result):
+                print(result.choices)
+            case .failure(let error):
+                //Handle chunk error here
+            }
+        } completion: { error, output, processing_time in
+            //Handle streaming error here with final output and processing time
+        }
+    */
+    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil,
+                          onPartialResult: @escaping (ChatStreamResult) -> Void,
+                          completion: @escaping (Error?, String, Double) -> Void) {
+        do {
+            let startTime = Date()
+            let contextLength = Int32(self.contextParams.context)
+            
+            // Initialize if first call
+            if self.nPast == 0 {
+                try self._eval_system_prompt(system_prompt: system_prompt)
+            }
+            try self._eval_img(img_path: img_path)
+            
+            print("Past token count: \(self.nPast)/\(contextLength) (\(self.past.count))")
+            
+            var inputTokens = try self.tokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
+            if inputTokens.count == 0 && (img_path ?? "").isEmpty {
+                completion(ModelError.emptyInput, "", 0)
+                return
+            }
+            
+            let inputTokensCount = inputTokens.count
+            print("Input tokens: \(inputTokens)")
+            
+            if inputTokensCount > contextLength {
+                throw ModelError.inputTooLong
+            }
+            
+            // Process input tokens in batches
+            try self.eval_input_tokens_batched(inputTokens: &inputTokens) { str, _ in true }
+            
+            // Reset output state
+            self.outputRepeatTokens = []
+            var output_cache = [String]()
+            var full_output = [String]()
+            var completion_loop = true
+            
+            while completion_loop {
+                // Sample next token
+                var outputToken: Int32 = -1
+                try ExceptionCather.catchException {
+                    outputToken = self.llm_sample()
+                }
+                
+                // Update repeat tokens
+                self.outputRepeatTokens.append(outputToken)
+                if self.outputRepeatTokens.count > self.sampleParams.repeat_last_n {
+                    self.outputRepeatTokens.removeFirst()
+                }
+                
+                // Check for end of generation
+                if self.llm_token_is_eog(token: outputToken) {
+                    completion_loop = false
+                    print("[EOG]")
+                    break
+                }
+                
+                // Handle token output
+                var skipCallback = false
+                if !self.chekc_skip_tokens(outputToken) {
+                    print("Skip token: \(outputToken)")
+                    skipCallback = true
+                }
+                
+                if !skipCallback, let str = self.llm_token_to_str(outputToken: outputToken) {
+                    output_cache.append(str)
+                    full_output.append(str)
+                    if output_cache.count >= self.contextParams.predict_cache_length {
+                        let cached_content = output_cache.joined()
+                        output_cache = []
+                        onPartialResult(.success(ModelResult(choices: [cached_content])))
+                    }
+                }
+                
+                // Check output limit
+                let output_count = output_cache.count
+                if self.contextParams.n_predict != 0 && output_count > self.contextParams.n_predict {
+                    print(" * n_predict reached *")
+                    completion_loop = false
+                    break
+                }
+                
+                // Handle context rotation
+                if completion_loop {
+                    if self.nPast >= self.contextParams.context - 2 {
+                        try self.kv_shift()
+                        onPartialResult(.success(ModelResult(choices: [" `C_LIMIT` "])))
+                    }
+                    
+                    // Feed generated token back
+                    var eval_res: Bool? = nil
+                    try ExceptionCather.catchException {
+                        var inputBatch = [outputToken]
+                        eval_res = try? self.llm_eval(inputBatch: &inputBatch)
+                    }
+                    if eval_res == false {
+                        throw ModelError.failedToEval
+                    }
+                    self.nPast += 1
+                }
+            }
+            
+            // Send any remaining cached output
+            if !output_cache.isEmpty {
+                let cached_content = output_cache.joined()
+                full_output.append(contentsOf: output_cache)
+                onPartialResult(.success(ModelResult(choices: [cached_content])))
+            }
+            
+            let endTime = Date()
+            let processingTime = endTime.timeIntervalSince(startTime) * 1000 // Convert to milliseconds
+            
+            print("Total tokens: \(inputTokensCount + full_output.count) (\(inputTokensCount) -> \(full_output.count))")
+            completion(nil, full_output.joined(), processingTime)
+        } catch {
+            completion(error, "", 0)
+        }
+    }
+    
+    // Combine-based streaming chat function
+    /*
+        llm
+            .chatsStream(query: query)
+            .sink { completion in
+                //Handle completion result here
+            } receiveValue: { result in
+                //Handle chunk here
+            }.store(in: &cancellables)
+    */
+    public func chatsStreamPublisher(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AnyPublisher<ModelResult, Error> {
+        return Future { promise in
+            self.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { result in
+                switch result {
+                case .success(let modelResult):
+                    promise(.success(modelResult))
+                case .failure(let error):
+                    promise(.failure(error))
+                }
+            } completion: { error, output, processingTime in
+                if let error = error {
+                    promise(.failure(error))
+                }
+            }
+        }.eraseToAnyPublisher()
+    }
+    
+    // AsyncSequence-based streaming chat function
+    /*
+        for try await result in openAI.chatsStream(query: query) {
+            //Handle result here
+        }
+    */
+    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AsyncThrowingStream<ModelResult, Error> {
+        return AsyncThrowingStream { continuation in
+            self.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { result in
+                switch result {
+                case .success(let modelResult):
+                    continuation.yield(modelResult)
+                case .failure(let error):
+                    continuation.finish(throwing: error)
+                }
+            } completion: { error, output, processingTime in
+                if let error = error {
+                    continuation.finish(throwing: error)
+                } else {
+                    continuation.finish()
+                }
+            }
+        }
     }
 }

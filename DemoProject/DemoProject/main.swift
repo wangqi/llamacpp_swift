@@ -7,6 +7,9 @@
 
 import Foundation
 import llamacpp_swift
+import Combine
+
+var cancellables = Set<AnyCancellable>()
 
 let maxOutputLength = 256
 var total_output = 0
@@ -64,18 +67,36 @@ try ai.loadModel_sync()
 //     }
 // }
 
+//if let model = ai.model {
+//    model.chatsStream(input: input_text) { partialResult in
+//        switch partialResult {
+//        case .success(let result):
+//            print("continue thinking...")
+//        case .failure(let error):
+//            print("ERROR: \(error)")
+//        }
+//    } completion: { final_string, processing_time, error in
+//        //Handle streaming error here
+//        print(final_string)
+//        print("Final Answer in \(processing_time) ms")
+//    }
+//}
+
+// Example of using chatsStream with Combine
 if let model = ai.model {
-    model.chatsStream(input: input_text) { partialResult in
-        switch partialResult {
-        case .success(let result):
-//            print(result.choices)
-            print("continue thinking...")
-        case .failure(let error):
-            print("ERROR: \(error)")
+    model.chatsStream(input: input_text)
+        .sink { completion in
+            switch completion {
+            case .finished:
+                print("Stream finished")
+            case .failure(let error):
+                print("Stream failed with error: \(error)")
+            }
+        } receiveValue: { partialResult in
+            // partialResult is your ModelResult
+            let chunk = partialResult.choices.joined()
+            print("Partial chunk: \(chunk)")
         }
-    } completion: { final_string, processing_time, error in
-        //Handle streaming error here
-        print(final_string)
-        print("Final Answer in \(processing_time) ms")
-    }
+        .store(in: &cancellables)
+    
 }

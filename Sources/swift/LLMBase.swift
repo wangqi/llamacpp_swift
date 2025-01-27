@@ -3,9 +3,9 @@
 //  Created by Guinmoon.
 
 import Foundation
+import Combine
 import llama
 import llamacpp_swift_cpp
-import Combine
 
 public enum ModelLoadError: Error {
     case modelLoadError
@@ -615,29 +615,57 @@ public class LLMBase {
     
     // Combine-based streaming chat function
     /*
-        llm
-            .chatsStream(query: query)
-            .sink { completion in
-                //Handle completion result here
-            } receiveValue: { result in
-                //Handle chunk here
-            }.store(in: &cancellables)
+     if let model = ai.model {
+         model.chatsStream(input: input_text)
+             .sink(
+                 receiveCompletion: { completion in
+                     switch completion {
+                     case .finished:
+                         print("Stream completed successfully")
+                     case .failure(let error):
+                         print("Stream error: \(error)")
+                     }
+                 },
+                 receiveValue: { modelResult in
+                     // Print each chunk of generated text
+                     print(modelResult.choices)
+                 }
+             )
+             .store(in: &cancellables)
+     }
     */
-    public func chatsStreamPublisher(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AnyPublisher<ModelResult, Error> {
-        return Future { promise in
-            self.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { result in
-                switch result {
+    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AnyPublisher<ModelResult, Error> {
+        let subject = PassthroughSubject<ModelResult, Error>()
+        
+        // Call the original streaming method
+        self.chatsStream(
+            input: input,
+            system_prompt: system_prompt,
+            img_path: img_path,
+            onPartialResult: { partialResult in
+                // partialResult is a ChatStreamResult
+                // which can be .success(ModelResult) or .failure(Error).
+                switch partialResult {
                 case .success(let modelResult):
-                    promise(.success(modelResult))
+                    // Emit partial output
+                    subject.send(modelResult)
                 case .failure(let error):
-                    promise(.failure(error))
+                    // Immediately fail the publisher
+                    subject.send(completion: .failure(error))
                 }
-            } completion: { output, processingTime, error in
+            },
+            completion: { output, processingTime, error in
+                // The final completion callback after streaming finishes
                 if let error = error {
-                    promise(.failure(error))
+                    subject.send(completion: .failure(error))
+                } else {
+                    subject.send(completion: .finished)
                 }
             }
-        }.eraseToAnyPublisher()
+        )
+        
+        // Return the subject as an AnyPublisher
+        return subject.eraseToAnyPublisher()
     }
     
     // AsyncSequence-based streaming chat function

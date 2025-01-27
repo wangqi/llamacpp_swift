@@ -4,6 +4,7 @@
 
 import Foundation
 import llama
+import llamacpp_swift
 import llamacpp_swift_cpp
 
 var LLaMa_obj:LLaMa? = nil

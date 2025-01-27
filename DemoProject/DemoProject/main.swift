@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import llmfarm_core
+import llamacpp_swift
 
 let maxOutputLength = 256
 var total_output = 0

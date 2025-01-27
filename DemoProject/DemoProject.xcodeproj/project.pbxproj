@@ -12,8 +12,8 @@
 		151746EA2B696C2A0074FF35 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E72B696C2A0074FF35 /* Metal.framework */; };
 		151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E82B696C2A0074FF35 /* MetalKit.framework */; };
 		151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E92B696C2A0074FF35 /* MetalPerformanceShaders.framework */; };
-		3023D1212D46281200E8EB80 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 3023D1202D46281200E8EB80 /* llama */; };
-		30F95B182D45DA7A0066A1B2 /* llmfarm_core in Frameworks */ = {isa = PBXBuildFile; productRef = 30F95B172D45DA7A0066A1B2 /* llmfarm_core */; };
+		30C25D302D475E0A00FFE474 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 30C25D2F2D475E0A00FFE474 /* llama */; };
+		30C25D332D475E1400FFE474 /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30C25D322D475E1400FFE474 /* llamacpp_swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -31,7 +31,6 @@
 /* Begin PBXFileReference section */
 		151746D72B6968EA0074FF35 /* DemoProject */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = DemoProject; sourceTree = BUILT_PRODUCTS_DIR; };
 		151746DA2B6968EA0074FF35 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		151746E12B6969200074FF35 /* llmfarm_core.swift */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = llmfarm_core.swift; path = ..; sourceTree = "<group>"; };
 		151746E52B696C080074FF35 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		151746E72B696C2A0074FF35 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		151746E82B696C2A0074FF35 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
@@ -43,12 +42,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3023D1212D46281200E8EB80 /* llama in Frameworks */,
+				30C25D302D475E0A00FFE474 /* llama in Frameworks */,
 				151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */,
+				30C25D332D475E1400FFE474 /* llamacpp_swift in Frameworks */,
 				151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */,
 				151746EA2B696C2A0074FF35 /* Metal.framework in Frameworks */,
 				151746E62B696C080074FF35 /* Accelerate.framework in Frameworks */,
-				30F95B182D45DA7A0066A1B2 /* llmfarm_core in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -58,7 +57,6 @@
 		151746CE2B6968EA0074FF35 = {
 			isa = PBXGroup;
 			children = (
-				151746E12B6969200074FF35 /* llmfarm_core.swift */,
 				151746D92B6968EA0074FF35 /* DemoProject */,
 				151746D82B6968EA0074FF35 /* Products */,
 				151746E22B696A950074FF35 /* Frameworks */,
@@ -109,8 +107,8 @@
 			);
 			name = DemoProject;
 			packageProductDependencies = (
-				30F95B172D45DA7A0066A1B2 /* llmfarm_core */,
-				3023D1202D46281200E8EB80 /* llama */,
+				30C25D2F2D475E0A00FFE474 /* llama */,
+				30C25D322D475E1400FFE474 /* llamacpp_swift */,
 			);
 			productName = DemoProject;
 			productReference = 151746D72B6968EA0074FF35 /* DemoProject */;
@@ -141,8 +139,8 @@
 			);
 			mainGroup = 151746CE2B6968EA0074FF35;
 			packageReferences = (
-				30F95B142D45DA720066A1B2 /* XCLocalSwiftPackageReference "../../llmfarm_core.swift" */,
-				3023D11F2D46281200E8EB80 /* XCLocalSwiftPackageReference "../../llama.cpp" */,
+				30C25D2E2D475E0A00FFE474 /* XCLocalSwiftPackageReference "../../llama.cpp" */,
+				30C25D312D475E1400FFE474 /* XCLocalSwiftPackageReference "../../llamacpp_swift" */,
 			);
 			productRefGroup = 151746D82B6968EA0074FF35 /* Products */;
 			projectDirPath = "";
@@ -329,24 +327,24 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		3023D11F2D46281200E8EB80 /* XCLocalSwiftPackageReference "../../llama.cpp" */ = {
+		30C25D2E2D475E0A00FFE474 /* XCLocalSwiftPackageReference "../../llama.cpp" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../llama.cpp;
 		};
-		30F95B142D45DA720066A1B2 /* XCLocalSwiftPackageReference "../../llmfarm_core.swift" */ = {
+		30C25D312D475E1400FFE474 /* XCLocalSwiftPackageReference "../../llamacpp_swift" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../llmfarm_core.swift;
+			relativePath = ../../llamacpp_swift;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3023D1202D46281200E8EB80 /* llama */ = {
+		30C25D2F2D475E0A00FFE474 /* llama */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = llama;
 		};
-		30F95B172D45DA7A0066A1B2 /* llmfarm_core */ = {
+		30C25D322D475E1400FFE474 /* llamacpp_swift */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = llmfarm_core;
+			productName = llamacpp_swift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

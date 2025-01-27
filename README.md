@@ -1,4 +1,4 @@
-# LLMFarm_core.swift Fork
+# llamacpp_swift
 This is a modified fork of [LLMFarm_core.swift](https://github.com/guinmoon/llmfarm_core.swift) with a key architectural change: it uses llama.cpp as an external package dependency instead of including it in the source directory. This decoupling makes the codebase cleaner and easier to maintain.
 
 The library allows you to work with large language models (LLM) on Apple platforms. It is based on [ggml](https://github.com/ggerganov/ggml) and [llama.cpp](https://github.com/ggerganov/llama.cpp) by [Georgi Gerganov](https://github.com/ggerganov).
@@ -53,9 +53,9 @@ The package automatically manages the llama.cpp dependency, so you don't need to
 To Debug `llamacpp_swift` package, do not forget to comment `.unsafeFlags(["-Ofast"])` in `Package.swift`.
 Don't forget that the debug version is slower than the release version.
 
-# Usage
+# Usage & Examples
 
-## [See examples in the Demo Project](/DemoProject)
+I added new streaming methods to the library.
 
 ## Streaming Methods
 

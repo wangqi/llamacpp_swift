@@ -171,6 +171,9 @@ public class LLMBase {
         
     }
     
+    public func delete_state() {
+    }
+    
     public func save_state(){
         
     }
@@ -248,7 +251,7 @@ public class LLMBase {
             var in_batch = [self.llm_token_eos()]
             _ = try? self.llm_eval(inputBatch: &in_batch)
         }
-        print("Context Limit!")
+//        print("Context Limit!")
     }
 
     // Checks if a token should be skipped
@@ -274,7 +277,7 @@ public class LLMBase {
 
             if self.nPast + Int32(inputBatch.count) >= self.contextParams.context{
                 try self.KVShift()
-                _ = callback(" `C_LIMIT` ",0)
+//                _ = callback(" `C_LIMIT` ", 0)
             }
             var eval_res:Bool? = nil
             try ExceptionCather.catchException {

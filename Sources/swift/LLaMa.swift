@@ -139,6 +139,22 @@ public class LLaMa: LLMBase {
         }
     }
     
+    public override func delete_state() {
+        if self.contextParams.save_load_state &&
+            self.contextParams.state_dump_path != "" &&
+            FileManager.default.fileExists(atPath: self.contextParams.state_dump_path) {
+            do {
+                try FileManager.default.removeItem(atPath: self.contextParams.state_dump_path)
+                print("State file deleted successfully: \(self.contextParams.state_dump_path)")
+            } catch {
+                print("Error deleting state file: \(error.localizedDescription)")
+            }
+        } else {
+            print("No state file found to delete.")
+        }
+    }
+
+    
     public override func save_state(){
         if self.contextParams.save_load_state &&
             self.contextParams.state_dump_path != "" &&
@@ -212,7 +228,7 @@ public class LLaMa: LLMBase {
         self.nPast -= n_discard;
 
         self.nPast+=1
-        print("Context Limit!")
+//        print("Context Limit!")
     }
     
     

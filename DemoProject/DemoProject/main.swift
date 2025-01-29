@@ -16,10 +16,12 @@ print("Load model: \(modelPath)")
 
 // Set up model parameters
 var params: ModelAndContextParams = .default
-params.promptFormat = .Custom
-params.custom_prompt_format = """
-<|User|>{prompt}<|Assistant|>
-"""
+//params.promptFormat = .Custom
+//params.custom_prompt_format = """
+//<|User|>{prompt}<|Assistant|>
+//"""
+params.promptFormat = .None
+params.custom_prompt_format = "{prompt}"
 params.use_metal = true
 print("Model Params: \(params)")
 

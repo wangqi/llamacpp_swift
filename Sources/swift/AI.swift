@@ -148,10 +148,10 @@ public class AI {
                         system_prompt:system_prompt,
                         img_path:img_path,
                         infoCallback:{str, obj in
-                                infoCallBack?(str,obj)
+                            infoCallBack?(str, obj)
                         })
                 }
-            }catch{
+            } catch {
                 print(error)
                 DispatchQueue.main.async {
                     self.flagResponding = false

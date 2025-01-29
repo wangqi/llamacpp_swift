@@ -47,7 +47,8 @@ let package = Package(
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
-        .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master")
+        .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0")
     ],
     targets: [
         .target(
@@ -63,6 +64,9 @@ let package = Package(
             ],
             publicHeadersPath: "include",
             cSettings: cSettings,
+            cxxSettings: [
+                .unsafeFlags(["-frtti"])  // Enable RTTI
+            ],
             linkerSettings: linkerSettings
         ),
         .target(

@@ -6,6 +6,7 @@ import Foundation
 import llama
 import llamacpp_swift
 import llamacpp_swift_cpp
+import Jinja
 
 var LLaMa_obj:LLaMa? = nil
 
@@ -334,18 +335,52 @@ public class LLaMa: LLMBase {
         return llama_vocab_eos(self.vocab)
     }
     
-    public override func LLMTokenize(_ input: String, add_bos: Bool?, parse_special: Bool?) -> [ModelToken] {
+    public override func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
+                                     add_bos: Bool? = nil, parse_special: Bool? = nil) -> [ModelToken] {
         print("LLaMa tokenize: input \(input), add_bos: \(add_bos), parse_special: \(parse_special)")
-        if input.count == 0 {
+        var jinjaTemplate: String = ""
+        if let chatTemplate = chatTemplate {
+            jinjaTemplate = chatTemplate
+        } else {
+            jinjaTemplate = self.load_chat_template() ?? "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+        }
+        print("LLMTokenize jinjaTemplate\n\(jinjaTemplate)\n")
+        let systemQuery = systemPrompt ?? ""
+        let userQuery = input ?? ""
+        var jinjaContext: [String: Any] = [
+            "messages": [
+                ["role": "system", "content": systemQuery],
+                ["role": "user", "content": userQuery],
+                ["role": "assistant", "content": nil, "tool_calls": [
+        //                ["type": "function", "function": ["name": "get_weather", "arguments": "{\"city\": \"Paris\"}"]]
+                    ]
+                ],
+        //      ["role": "tool", "content": "Sunny, 22°C"]
+            ],
+            "add_generation_prompt": true,
+        ]
+        if add_bos ?? self.contextParams.add_bos_token {
+            jinjaContext["bos_token"] = "<s>"
+        }
+        var query = input
+        do {
+            query = try Template(jinjaTemplate).render(jinjaContext)
+        } catch {
+            print("Failed to render jinja template: \(error)")
+            print("context: \(context)")
+            print("query: \(query)")
+        }
+        if query.count == 0 {
             return []
         }
-        let utf8_count = input.utf8.count
+        print("Final query: \(query)")
+        let utf8_count = query.utf8.count
         let n_tokens = Int32(utf8_count) + (self.contextParams.add_bos_token == true ? 1 : 0)
         var embeddings: [llama_token] = Array<llama_token>(repeating: llama_token(), count: utf8_count)
-        let n:Int32 = llama_tokenize(self.vocab, input, Int32(input.utf8.count), &embeddings, n_tokens,
+        let n:Int32 = llama_tokenize(self.vocab, query, Int32(query.utf8.count), &embeddings, n_tokens,
                                      add_bos ?? self.contextParams.add_bos_token,
                                      parse_special ?? self.contextParams.parse_special_tokens)
-        if n<=0 {
+        if n <= 0 {
             return []
         }
         if Int(n) <= embeddings.count {

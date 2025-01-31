@@ -18,7 +18,10 @@
 		3041EE4B2D478E44004FAAA1 /* TestPredict.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE482D478E44004FAAA1 /* TestPredict.swift */; };
 		3041EE4C2D478E44004FAAA1 /* TestCallbackStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE462D478E44004FAAA1 /* TestCallbackStream.swift */; };
 		3041EE4D2D478E44004FAAA1 /* TestStructuredStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */; };
-		30D840932D4C66C700D3B586 /* Jinja in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840922D4C66C700D3B586 /* Jinja */; };
+		30D840AE2D4CD69100D3B586 /* Jinja in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840AD2D4CD69100D3B586 /* Jinja */; };
+		30D840B12D4CD96E00D3B586 /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840B02D4CD96E00D3B586 /* llamacpp_swift */; };
+		30D840B42D4CD99B00D3B586 /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840B32D4CD99B00D3B586 /* llamacpp_swift */; };
+		30D840B72D4CDA8800D3B586 /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840B62D4CDA8800D3B586 /* llamacpp_swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -52,9 +55,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				3036A1882D4C52E0004F1CDB /* llama in Frameworks */,
-				30D840932D4C66C700D3B586 /* Jinja in Frameworks */,
+				30D840AE2D4CD69100D3B586 /* Jinja in Frameworks */,
+				30D840B42D4CD99B00D3B586 /* llamacpp_swift in Frameworks */,
 				151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */,
+				30D840B72D4CDA8800D3B586 /* llamacpp_swift in Frameworks */,
 				3036A18B2D4C5565004F1CDB /* llamacpp_swift in Frameworks */,
+				30D840B12D4CD96E00D3B586 /* llamacpp_swift in Frameworks */,
 				151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */,
 				151746EA2B696C2A0074FF35 /* Metal.framework in Frameworks */,
 				151746E62B696C080074FF35 /* Accelerate.framework in Frameworks */,
@@ -123,7 +129,10 @@
 			packageProductDependencies = (
 				3036A1872D4C52E0004F1CDB /* llama */,
 				3036A18A2D4C5565004F1CDB /* llamacpp_swift */,
-				30D840922D4C66C700D3B586 /* Jinja */,
+				30D840AD2D4CD69100D3B586 /* Jinja */,
+				30D840B02D4CD96E00D3B586 /* llamacpp_swift */,
+				30D840B32D4CD99B00D3B586 /* llamacpp_swift */,
+				30D840B62D4CDA8800D3B586 /* llamacpp_swift */,
 			);
 			productName = DemoProject;
 			productReference = 151746D72B6968EA0074FF35 /* DemoProject */;
@@ -155,8 +164,8 @@
 			mainGroup = 151746CE2B6968EA0074FF35;
 			packageReferences = (
 				3036A1862D4C52E0004F1CDB /* XCLocalSwiftPackageReference "../../llama.cpp" */,
-				3036A1892D4C5565004F1CDB /* XCLocalSwiftPackageReference "../../llamacpp_swift" */,
-				30D840912D4C66C700D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */,
+				30D840AC2D4CD69100D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */,
+				30D840B52D4CDA8800D3B586 /* XCLocalSwiftPackageReference "../../llamacpp_swift" */,
 			);
 			productRefGroup = 151746D82B6968EA0074FF35 /* Products */;
 			projectDirPath = "";
@@ -351,13 +360,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../llama.cpp;
 		};
-		3036A1892D4C5565004F1CDB /* XCLocalSwiftPackageReference "../../llamacpp_swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../llamacpp_swift;
-		};
-		30D840912D4C66C700D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */ = {
+		30D840AC2D4CD69100D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Jinja;
+		};
+		30D840B52D4CDA8800D3B586 /* XCLocalSwiftPackageReference "../../llamacpp_swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../llamacpp_swift;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -370,9 +379,21 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = llamacpp_swift;
 		};
-		30D840922D4C66C700D3B586 /* Jinja */ = {
+		30D840AD2D4CD69100D3B586 /* Jinja */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Jinja;
+		};
+		30D840B02D4CD96E00D3B586 /* llamacpp_swift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = llamacpp_swift;
+		};
+		30D840B32D4CD99B00D3B586 /* llamacpp_swift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = llamacpp_swift;
+		};
+		30D840B62D4CDA8800D3B586 /* llamacpp_swift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = llamacpp_swift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

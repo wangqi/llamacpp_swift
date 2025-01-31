@@ -40,33 +40,8 @@ ai.model?.sampleParams.mirostat_tau = 5.0
 
 try? ai.loadModel_sync()
 
-// load chat template
-var chatTemplate = ai.loadChatTempate()
-if let chatTemplate = chatTemplate {
-    print("chat template: \(chatTemplate)")
-} else {
-    print("no chat template")
-}
-
 // Test query
-var context: [String: Any] = [
-    "messages": [
-            ["role": "system", "content": "You are a helpful assistant."],
-            ["role": "user", "content": "What is the meaning of life?"
-        ],
-        [
-            "role": "assistant", "content": nil,
-            "tool_calls": [
-//                ["type": "function", "function": ["name": "get_weather", "arguments": "{\"city\": \"Paris\"}"]]
-            ]
-        ],
-//        ["role": "tool", "content": "Sunny, 22°C"]
-    ],
-        "add_generation_prompt": true,
-        "bos_token": "<s>"
-]
-let query = try Template(chatTemplate!).render(context)
-print("Final query: \(query)")
+let query = "生命的意义是什么?"
 
 // Select test mode
 print("Select test mode:")

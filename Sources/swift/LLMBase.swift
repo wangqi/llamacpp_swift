@@ -415,16 +415,11 @@ public class LLMBase {
     public func TokenizePrompt(_ input: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
+            print("LLMBase.TokenizePrompt: use model default Jinja2 Chat Template")
             return LLMTokenize(input)
         case .Custom:
-            var formated_input = self.contextParams.custom_prompt_format.replacingOccurrences(of: "{{prompt}}", with: input)
-            formated_input = formated_input.replacingOccurrences(of: "{prompt}", with: input)
-            formated_input = formated_input.replacingOccurrences(of: "\\n", with: "\n")
-            var tokenized:[ModelToken] = []
-            try ExceptionCather.catchException {
-                tokenized = LLMTokenize(formated_input)
-            }
-            return tokenized
+            print("LLMBase.TokenizePrompt: use custom Jinja2 Chat Template")
+            return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format)
          }
     }
 
@@ -432,19 +427,11 @@ public class LLMBase {
     public func TokenizePromptWithSystem(_ input: String, _ systemPrompt: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
-            return LLMTokenize(input)
+            print("LLMBase.TokenizePromptWithSystem: use model default Jinja2 Chat Template")
+            return LLMTokenize(input, systemPrompt: systemPrompt)
         case .Custom:
-            var formated_input = self.contextParams.custom_prompt_format.replacingOccurrences(of: "{{system}}", with: systemPrompt)
-            formated_input = formated_input.replacingOccurrences(of: "{system}", with: systemPrompt)
-            formated_input = formated_input.replacingOccurrences(of: "{{prompt}}", with: input)
-            formated_input = formated_input.replacingOccurrences(of: "{prompt}", with: input)
-            formated_input = formated_input.replacingOccurrences(of: "\\n", with: "\n")
-            print("LLMBase.tokenizePromptWithSystem: Input text '\(formated_input)'")
-            var tokenized:[ModelToken] = []
-            try ExceptionCather.catchException {
-                tokenized = LLMTokenize(formated_input)
-            }
-            return tokenized
+            print("LLMBase.TokenizePromptWithSystem: use custom Jinja2 Chat Template")
+            return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format, systemPrompt: systemPrompt)
          }
     }
 
@@ -464,7 +451,8 @@ public class LLMBase {
         }
     }
     
-    public func LLMTokenize(_ input: String, add_bos: Bool? = nil, parse_special:Bool? = nil) -> [ModelToken] {
+    public func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
+                            add_bos: Bool? = nil, parse_special: Bool? = nil) -> [ModelToken] {
         return []
     }
     

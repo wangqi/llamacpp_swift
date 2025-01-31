@@ -1,4 +1,4 @@
-// swift-tools-version: 5.6
+// swift-tools-version: 5.8
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -39,7 +39,7 @@ var linkerSettings: [LinkerSetting] = [
 
 let package = Package(
     name: "llamacpp_swift",
-    platforms: [.macOS(.v12),.iOS(.v15)],
+    platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
         .library(
             name: "llamacpp_swift",
@@ -48,6 +48,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master"),
+        .package(url: "https://github.com/wangqi/Jinja", branch: "master"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0")
     ],
     targets: [
@@ -73,7 +74,8 @@ let package = Package(
               name: "llamacpp_swift",
               dependencies: [
                 "llamacpp_swift_cpp",
-                .product(name: "llama", package: "llama.cpp")
+                .product(name: "llama", package: "llama.cpp"),
+                .product(name: "Jinja", package: "Jinja"),
               ],
               path: "Sources/swift"
         )

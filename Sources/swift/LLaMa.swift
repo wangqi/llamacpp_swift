@@ -117,6 +117,12 @@ public class LLaMa: LLMBase {
         return true
     }
     
+    /*
+     * load default chat_template from model
+     */
+    public override func load_chat_template(name: String? = nil) -> String? {
+        return spm_llama_model_chat_template(model: self.model, name: name)
+    }
     
     public override func llm_sample() -> ModelToken {
         let id  = spm_llama_sampling_sample(ctxSampling: self.ctx_sampling, ctxMain: self.context, idx: -1, grammarFirst: false);
@@ -153,7 +159,6 @@ public class LLaMa: LLMBase {
             print("No state file found to delete.")
         }
     }
-
     
     public override func save_state(){
         if self.contextParams.save_load_state &&

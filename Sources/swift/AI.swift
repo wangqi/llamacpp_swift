@@ -29,8 +29,6 @@ public class AI {
     public var modelName: String
     public var chatName: String
     
-    
-    
     public var flagExit = false
     private(set) var flagResponding = false
     
@@ -44,7 +42,6 @@ public class AI {
         // self.model?.destroy_objects()
         self.model = nil
     }
-    
     
     public func initModel(_ inference: ModelInference,contextParams: ModelAndContextParams = .default) {
         self.model = nil
@@ -87,7 +84,6 @@ public class AI {
             throw error
         }
     }
-
     
     public func loadModel() {
         aiQueue.async {
@@ -108,6 +104,10 @@ public class AI {
                 self.model?.modelLoadCompleteCallback?("[Done]")
             }
         }
+    }
+    
+    public func loadChatTempate() -> String? {
+        return self.model?.load_chat_template()
     }
 
     public func conversation(_ input: String,

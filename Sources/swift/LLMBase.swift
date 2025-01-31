@@ -118,6 +118,10 @@ public class LLMBase {
         return false
     }
     
+    public func load_chat_template(name: String? = nil) -> String? {
+        return nil
+    }
+    
     // Checks if a token represents the end of generation
     public func llm_token_is_eog(token: ModelToken) -> Bool {
         return token == llm_token_eos()

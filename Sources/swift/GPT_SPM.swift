@@ -169,6 +169,32 @@ public func init_sampling(
     return ctx
 }
 
+// MARK: load chat template
+/// Replacement for the original C++ `init_sampling(...)`.
+/// Instead of calling `llama_model_chat_template(...)`, we manually build a llama sampler chain.
+public func spm_llama_model_chat_template(
+    model: OpaquePointer?,
+    name: String?
+) -> String? {
+    // Handle optional name parameter
+    var cName: UnsafeMutablePointer<CChar>? = nil
+    if let name = name {
+        cName = strdup(name) // Convert Swift String to C string
+    }
+    
+    defer {
+        free(cName) // Clean up allocated C string
+    }
+    
+    // Call C function with optional parameters
+    guard let resultPtr = llama_model_chat_template(model, cName) else {
+        return nil
+    }
+    
+    // Convert C string result to Swift String
+    return String(cString: resultPtr)
+}
+
 // MARK: - spm_llama_sampling_sample / spm_llama_sampling_accept
 
 /// Swift version of `spm_llama_sampling_sample(...)`.

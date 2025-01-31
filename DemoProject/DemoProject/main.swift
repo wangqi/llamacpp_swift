@@ -39,8 +39,17 @@ ai.model?.sampleParams.mirostat_tau = 5.0
 
 try? ai.loadModel_sync()
 
+// load chat template
+var chatTemplate = ai.loadChatTempate()
+if let chatTemplate = chatTemplate {
+    print("chat template: \(chatTemplate)")
+} else {
+    print("no chat template")
+}
+
 // Test query
-let query = "What is the meaning of life?"
+//let query = "What is the meaning of life?"
+let query = "\n<｜User｜>What is the meaning of life?\n<｜Assistant｜>"
 
 // Select test mode
 print("Select test mode:")

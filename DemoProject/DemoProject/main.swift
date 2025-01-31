@@ -8,6 +8,7 @@
 import Foundation
 import llamacpp_swift
 import Combine
+import Jinja
 
 // Initialize AI with model path
 let modelPath = "/Users/wangqi/disk/projects/ai/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
@@ -48,8 +49,24 @@ if let chatTemplate = chatTemplate {
 }
 
 // Test query
-//let query = "What is the meaning of life?"
-let query = "\n<｜User｜>What is the meaning of life?\n<｜Assistant｜>"
+var context: [String: Any] = [
+    "messages": [
+            ["role": "system", "content": "You are a helpful assistant."],
+            ["role": "user", "content": "What is the meaning of life?"
+        ],
+        [
+            "role": "assistant", "content": nil,
+            "tool_calls": [
+//                ["type": "function", "function": ["name": "get_weather", "arguments": "{\"city\": \"Paris\"}"]]
+            ]
+        ],
+//        ["role": "tool", "content": "Sunny, 22°C"]
+    ],
+        "add_generation_prompt": true,
+        "bos_token": "<s>"
+]
+let query = try Template(chatTemplate!).render(context)
+print("Final query: \(query)")
 
 // Select test mode
 print("Select test mode:")

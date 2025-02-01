@@ -337,7 +337,10 @@ public class LLaMa: LLMBase {
     
     public override func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
                                      add_bos: Bool? = nil, parse_special: Bool? = nil) -> [ModelToken] {
-        print("LLaMa tokenize: input \(input), add_bos: \(add_bos), parse_special: \(parse_special)")
+        let final_add_bos = add_bos ?? self.contextParams.add_bos_token
+        let final_parse_special = parse_special ?? self.contextParams.parse_special_tokens
+        
+        print("LLaMa tokenize: input \(input), add_bos: \(final_add_bos), parse_special: \(final_parse_special)")
         var jinjaTemplate: String = ""
         if let chatTemplate = chatTemplate {
             jinjaTemplate = chatTemplate
@@ -359,7 +362,7 @@ public class LLaMa: LLMBase {
             ],
             "add_generation_prompt": true,
         ]
-        if add_bos ?? self.contextParams.add_bos_token {
+        if final_add_bos {
             jinjaContext["bos_token"] = "<s>"
         }
         var query = input
@@ -375,11 +378,10 @@ public class LLaMa: LLMBase {
         }
         print("Final query: \(query)")
         let utf8_count = query.utf8.count
-        let n_tokens = Int32(utf8_count) + (self.contextParams.add_bos_token == true ? 1 : 0)
+        let n_tokens = Int32(utf8_count) + (final_add_bos ? 1 : 0)
         var embeddings: [llama_token] = Array<llama_token>(repeating: llama_token(), count: utf8_count)
-        let n:Int32 = llama_tokenize(self.vocab, query, Int32(query.utf8.count), &embeddings, n_tokens,
-                                     add_bos ?? self.contextParams.add_bos_token,
-                                     parse_special ?? self.contextParams.parse_special_tokens)
+        let n:Int32 = llama_tokenize(self.vocab, query, Int32(utf8_count), &embeddings, n_tokens,
+                                     final_add_bos, final_parse_special)
         if n <= 0 {
             return []
         }

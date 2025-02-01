@@ -41,7 +41,7 @@ ai.model?.sampleParams.mirostat_tau = 5.0
 try? ai.loadModel_sync()
 
 // Test query
-let query = "生命的意义是什么?"
+let query = "Using the numbers [19, 36, 55, 7], create an equation that equals 65."
 
 // Select test mode
 print("Select test mode:")
@@ -69,6 +69,6 @@ if let input = readLine(), let testMode = Int(input) {
         // Add a small delay to see the results
         Thread.sleep(forTimeInterval: 2)
     default:
-        print("Invalid test mode selected")
+        testPredict(ai: ai, query: query)
     }
 }

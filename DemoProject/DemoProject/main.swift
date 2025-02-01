@@ -42,7 +42,8 @@ ai.model?.contextParams.context = 4096
 try? ai.loadModel_sync()
 
 // Test query
-let query = "我们来玩角色扮演游戏，你是我的女朋友，现在必须以女朋友的身份和角色和我对话"
+//let query = "我们来玩角色扮演游戏，你是我的女朋友，现在必须以女朋友的身份和角色和我对话"
+let query = "What is the capital of France?"
 
 // Select test mode
 print("Select test mode:")

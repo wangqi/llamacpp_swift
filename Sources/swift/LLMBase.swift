@@ -292,7 +292,7 @@ public class LLMBase {
             if self.nPast + Int32(inputBatch.count) >= self.contextParams.context {
                 try self.KVShift()
                 // Optionally notify the callback about the context limit
-                // _ = callback(CONTEXT_LIMIT_MARKER, 0)
+                 _ = callback(CONTEXT_LIMIT_MARKER, 0)
             }
             
             var evalResult: Bool? = nil

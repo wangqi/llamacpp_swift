@@ -7,6 +7,7 @@
 
 
 import Foundation
+import Jinja
 
 /// A Swift approximation of your C++ minja::chat_template
 /// The idea: store the template source, parse it, track booleans like
@@ -27,7 +28,7 @@ public class ChatTemplate {
     /// The Swift analog of `template_root_ = minja::Parser::parse(...)`.
     /// In real usage, you'd parse `source` into an AST or structured template.
     /// We'll store a placeholder here.
-    private var templateRoot: TemplateNode?
+    private var jinjaTemplate: Template?
 
     // MARK: - Initialization
 
@@ -48,7 +49,13 @@ public class ChatTemplate {
         self.supportsParallelToolCalls = false
 
         // parse the template
-        self.templateRoot = TemplateParser.parse(source: source)
+        do {
+            // Attempt to render the Jinja template
+            self.jinjaTemplate = try Template(source)
+        } catch {
+            print("Failed to render jinja template: \(error)")
+            print("Source: \(self.source)")
+        }
 
         // check if the source references "tools"
         if source.range(of: "tools", options: .caseInsensitive) != nil {
@@ -212,8 +219,14 @@ public class ChatTemplate {
         }
 
         // now do the "render"
-        let prompt = renderTemplate(context: context)
-        return prompt
+        do {
+            let prompt = try self.jinjaTemplate?.render(context) ?? "JINJA ERROR"
+            return prompt
+        } catch {
+            print("ChatTemplate.apply error: \(error)")
+            print("context: \(context)")
+        }
+        return "JINJA PARSE ERROR"
     }
 
     // MARK: - “tryRawRender” helper
@@ -303,43 +316,4 @@ public class ChatTemplate {
         return newMessages
     }
 
-    // MARK: - Template Rendering
-
-    /// The final “render” step. In your original code, this calls
-    /// `template_root_->render(context)`. Here, we'll do a placeholder that
-    /// calls Swift's `TemplateNode.render(context:)`.
-    private func renderTemplate(context: [String: Any]) -> String {
-        guard let root = self.templateRoot else {
-            // If no parsed template, just return the raw source for demonstration
-            return self.source
-        }
-        return root.render(context: context)
-    }
-}
-
-
-// MARK: - “TemplateNode” & “TemplateParser” placeholders
-//
-// In your original code, you used `minja::Parser` to parse the template into a
-// `TemplateNode`. Here, we define them as Swift placeholders. You can
-// implement a real parser or use a library like Stencil.
-
-public protocol TemplateNode {
-    func render(context: [String: Any]) -> String
-}
-
-public struct TemplateParser {
-    public static func parse(source: String) -> TemplateNode? {
-        // minimal example
-        return SimpleTemplateNode(source: source)
-    }
-}
-
-public struct SimpleTemplateNode: TemplateNode {
-    let source: String
-
-    public func render(context: [String: Any]) -> String {
-        // For demonstration, just echo the source. Real code can do advanced Jinja logic
-        return source
-    }
 }

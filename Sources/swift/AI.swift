@@ -484,7 +484,7 @@ public struct ModelAndContextParams {
     public var grammar_path:String? = nil
     public var add_bos_token = true
     public var add_eos_token = false
-    public var parse_special_tokens = true
+    public var parse_special_tokens = false
     public var flash_attn = false
     public var save_load_state = true
     

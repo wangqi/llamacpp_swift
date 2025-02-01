@@ -42,7 +42,7 @@ ai.model?.contextParams.context = 4096
 try? ai.loadModel_sync()
 
 // Test query
-let query = "我们来玩角色扮演游戏，你是我的女朋友，现在我想和你聊聊今天的计划"
+let query = "我们来玩角色扮演游戏，你是我的女朋友，现在必须以女朋友的身份和角色和我对话"
 
 // Select test mode
 print("Select test mode:")
@@ -51,6 +51,8 @@ print("2. Structured Concurrency Stream")
 print("3. Callback Stream")
 print("4. Combine Stream")
 
+testPredict(ai: ai, query: query)
+/*
 if let input = readLine(), let testMode = Int(input) {
     switch testMode {
     case 1:
@@ -73,3 +75,4 @@ if let input = readLine(), let testMode = Int(input) {
         testPredict(ai: ai, query: query)
     }
 }
+*/

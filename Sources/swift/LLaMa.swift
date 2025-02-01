@@ -22,6 +22,7 @@ public class LLaMa: LLMBase {
     public var vocab: OpaquePointer?
     public var batch: llama_batch?
     public var hardware_arch: String = ""
+    public private(set) var chatTemplate: ChatTemplate?
     
     // Temporarily accumulates CChar arrays when partial UTF-8 decoding is happening
     public var temporary_invalid_cchars: [CChar] = []
@@ -165,6 +166,18 @@ public class LLaMa: LLMBase {
         
         // Create a new batch
         self.batch = llama_batch_init(sampleParams.n_batch, 0, 1)
+        
+        // Get model's chat template
+        let modelChatTemplate = self.load_chat_template() ?? """
+{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}
+"""
+        
+        // Initialize chat template
+        self.chatTemplate = ChatTemplate(
+            source: modelChatTemplate,
+            bosToken: LLMTokenToStr(outputToken: llama_vocab_bos(self.vocab)) ?? "<s>",
+            eosToken: LLMTokenToStr(outputToken: llama_vocab_eos(self.vocab)) ?? "</s>"
+        )
         
         return true
     }
@@ -600,7 +613,7 @@ public class LLaMa: LLMBase {
        - chatTemplate: A custom template, if you want to override the default model template.
        - systemPrompt: A system prompt to insert.
        - add_bos: Override for whether the BOS token is included. If nil, use contextParams.add_bos_token.
-       - parse_special: If true, tries to interpret <|im_start|> and similar special tokens.
+       - parse_special: If true, tries to interpret  and similar special tokens.
      
      - Returns: Array of tokens for the entire combined prompt.
      */
@@ -613,60 +626,35 @@ public class LLaMa: LLMBase {
         let final_add_bos       = add_bos ?? self.contextParams.add_bos_token
         let final_parse_special = parse_special ?? self.contextParams.parse_special_tokens
         
-        print("LLaMa tokenize: input \(input), add_bos: \(final_add_bos), parse_special: \(final_parse_special)")
-        
-        // If no custom chatTemplate is provided, try to load a default from the model
-        var jinjaTemplate: String = ""
-        if let chatTemplate = chatTemplate {
-            jinjaTemplate = chatTemplate
-        } else {
-            jinjaTemplate = self.load_chat_template() ?? """
-            {% for message in messages %}
-            {% if loop.first and messages[0]['role'] != 'system' %}
-            {{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}
-            {% endif %}
-            {{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}
-            {% endfor %}
-            {% if add_generation_prompt %}
-            {{ '<|im_start|>assistant\n' }}
-            {% endif %}
-            """
-        }
-        print("LLMTokenize jinjaTemplate\n\(jinjaTemplate)\n")
+        print("LLaMa tokenize: input: \"\(input)\", add_bos: \(final_add_bos), parse_special: \(final_parse_special)")
         
         let systemQuery = systemPrompt ?? ""
-        let userQuery   = input // input is never nil; `?? ""` is unnecessary here.
+        let userQuery   = input
         
-        // Build the Jinja context for your chat
-        var jinjaContext: [String: Any] = [
-            "messages": [
-                ["role": "system",    "content": systemQuery],
-                ["role": "user",      "content": userQuery],
-                [
-                    "role":     "assistant",
-                    "content":  nil,
-                    "tool_calls": [
-                       // example: ["type": "function", "function": ["name": "get_weather", "arguments": "{\"city\": \"Paris\"}"]]
-                    ]
-                ],
-                // Optional example: ["role": "tool", "content": "Sunny, 22°C"]
-            ],
-            "add_generation_prompt": true
+        // Build the messages array for chat template
+        let messages: [[String: Any]] = [
+            ["role": "system", "content": systemQuery],
+            ["role": "user", "content": userQuery],
+            /*
+            [
+                "role": "assistant",
+                "content": NSNull(),
+                "tool_calls": []
+            ]
+             */
         ]
-        if final_add_bos {
-            // If your template actually references bos_token, you need to add it in the string
-            // e.g., "{{ bos_token }}"
-            jinjaContext["bos_token"] = "<s>"
-        }
         
         var query = input
-        do {
-            // Attempt to render the Jinja template
-            query = try Template(jinjaTemplate).render(jinjaContext)
-        } catch {
-            print("Failed to render jinja template: \(error)")
-            print("context: \(jinjaContext)")
-            print("query: \(query)")
+        if let template = self.chatTemplate {
+            // Use ChatTemplate to format the messages
+            query = template.apply(
+                messages: messages,
+                tools: [:],
+                addGenerationPrompt: true,
+                extraContext: final_add_bos ? ["bos_token": "<s>"] : [:]
+            )
+        } else {
+            print("LLaMa.chatTemplate is nil. Using input directly as query.")
         }
         
         if query.count == 0 {

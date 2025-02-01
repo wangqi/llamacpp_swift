@@ -52,6 +52,8 @@ public class ChatTemplate {
         do {
             // Attempt to render the Jinja template
             self.jinjaTemplate = try Template(source)
+            print("ChatTemplate successfully parsed Jinja template")
+            print(source)
         } catch {
             print("Failed to render jinja template: \(error)")
             print("Source: \(self.source)")
@@ -217,6 +219,9 @@ public class ChatTemplate {
         for (k, v) in extraContext {
             context[k] = v
         }
+        print("ChatTemplate.apply. Final Context\n[BEGIN CONTEXT]")
+        print(context)
+        print("[END CONTEXT]\n")
 
         // now do the "render"
         do {

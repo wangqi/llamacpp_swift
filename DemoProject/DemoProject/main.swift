@@ -37,11 +37,12 @@ if ai.model == nil {
 ai.model?.sampleParams.mirostat = 2
 ai.model?.sampleParams.mirostat_eta = 0.1
 ai.model?.sampleParams.mirostat_tau = 5.0
+ai.model?.contextParams.context = 4096
 
 try? ai.loadModel_sync()
 
 // Test query
-let query = "Using the numbers [19, 36, 55, 7], create an equation that equals 65."
+let query = "我们来玩角色扮演游戏，你是我的女朋友，现在我想和你聊聊今天的计划"
 
 // Select test mode
 print("Select test mode:")

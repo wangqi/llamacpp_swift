@@ -1,6 +1,7 @@
 //
 //  LLMBase.swift
 //  Created by Guinmoon.
+//
 
 import Foundation
 import Combine
@@ -13,25 +14,35 @@ public enum ModelLoadError: Error {
     case grammarLoadError
 }
 
+/// A base class for loading and using a Large Language Model (LLM).
 public class LLMBase {
+    
+    // MARK: - Constants
+    
+    /// A special marker used when the context limit is reached.
+    private let CONTEXT_LIMIT_MARKER = " `C_LIMIT` "
+    
+    // MARK: - Properties
     
     public var context: OpaquePointer?
     public var grammar: OpaquePointer?
     public var contextParams: ModelAndContextParams
     public var sampleParams: ModelSampleParams = .default
     public var session_tokens: [Int32] = []
+    
     public var modelLoadProgressCallback: ((Float) -> (Bool))? = nil
     public var modelLoadCompleteCallback: ((String) -> ())? = nil
     public var evalCallback: ((Int) -> (Bool))? = nil
     public var evalDebugCallback: ((String) -> (Bool))? = nil
+    
     public var modelPath: String
     public var outputRepeatTokens: [ModelToken] = []
     
-    // Used to keep old context until it needs to be rotated or purged for new tokens
     var past: [[ModelToken]] = []
     public var nPast: Int32 = 0
     
-    // Initializes the model with the given file path and parameters
+    // MARK: - Initialization
+    
     public init(path: String, contextParams: ModelAndContextParams = .default) throws {
         self.modelPath = path
         self.contextParams = contextParams
@@ -42,19 +53,20 @@ public class LLMBase {
         }
     }
 
-    // Loads the model into memory, sets up grammar if specified, and initializes logits
+    // MARK: - Model Loading
+    
     public func load_model() throws {
-        var load_res: Bool? = false
+        var loadResult: Bool? = false
         do {
             try ExceptionCather.catchException {
-                load_res = try? self.llm_load_model(path: self.modelPath, contextParams: contextParams)
+                loadResult = try? self.llm_load_model(path: self.modelPath, contextParams: contextParams)
             }
-        
-            if load_res != true {
+            
+            if loadResult != true {
                 throw ModelLoadError.modelLoadError
             }
             
-            // Load grammar if specified in context parameters
+            // Load grammar if specified
             if let grammarPath = self.contextParams.grammar_path, !grammarPath.isEmpty {
                 try? self.load_grammar(grammarPath)
             }
@@ -63,57 +75,61 @@ public class LLMBase {
             try ExceptionCather.catchException {
                 _ = try? self.llm_init_logits()
             }
-
             print("Logits inited.")
+            
         } catch {
-            print(error)
+            print("load_model() error: \(error)")
             throw error
         }
     }
 
-    // Placeholder function for loading a CLIP model
+    // MARK: - CLIP placeholders
+    
     public func load_clip_model() -> Bool {
         return true
     }
     
-    // Placeholder function for deinitializing a CLIP model
-    public func deinit_clip_model() {}
+    public func deinit_clip_model() {
+    }
 
-    // Placeholder function for destroying all resources or objects
-    public func destroy_objects() {}
-
+    public func destroy_objects() {
+    }
+    
     deinit {
         print("deinit LLMBase")
     }
     
-    // Retrieves the number of GPU layers based on hardware and context parameters
+    // MARK: - GPU Layers
+    
     public func get_gpu_layers() -> Int32 {
         var n_gpu_layers: Int32 = 0
         let hardware_arch = Get_Machine_Hardware_Name()
         if hardware_arch == "x86_64" {
             n_gpu_layers = 0
         } else if contextParams.use_metal {
-#if targetEnvironment(simulator)
+            #if targetEnvironment(simulator)
             n_gpu_layers = 0
             print("Running on simulator, force use n_gpu_layers = 0")
-#else
+            #else
             n_gpu_layers = 100
-#endif
+            #endif
         }
         return n_gpu_layers
     }
     
-    // Loads grammar from the specified file path
+    // MARK: - Grammar
+    
     public func load_grammar(_ path: String) throws {
         do {
-            // Implement grammar loading logic here if required
+            // Implement grammar loading logic if required
         } catch {
-            print(error)
+            print("load_grammar() error: \(error)")
             throw error
         }
     }
     
-    // Loads the model with the specified path and parameters
+    // MARK: - Core LLM Calls
+    
     public func llm_load_model(path: String = "", contextParams: ModelAndContextParams = .default) throws -> Bool {
         return false
     }
@@ -122,116 +138,108 @@ public class LLMBase {
         return nil
     }
     
-    // Checks if a token represents the end of generation
     public func llm_token_is_eog(token: ModelToken) -> Bool {
         return token == llm_token_eos()
     }
     
-    // Returns the newline token
     public func llm_token_nl() -> ModelToken {
         return 13
     }
     
-    // Returns the beginning-of-sequence (BOS) token
     public func llm_token_bos() -> ModelToken {
         print("llm_token_bos base")
         return 0
     }
     
-    // Returns the end-of-sequence (EOS) token
     public func llm_token_eos() -> ModelToken {
         print("llm_token_eos base")
         return 0
     }
     
-    // Retrieves the vocabulary size for the given context
     func llm_n_vocab(_ ctx: OpaquePointer!) -> Int32 {
         print("llm_n_vocab base")
         return 0
     }
     
-    // Retrieves the logits for the given context
     func llm_get_logits(_ ctx: OpaquePointer!) -> UnsafeMutablePointer<Float>? {
         print("llm_get_logits base")
         return nil
     }
     
-    // Retrieves the context length for the given context
     func llm_get_n_ctx(ctx: OpaquePointer!) -> Int32 {
         print("llm_get_n_ctx base")
         return 0
     }
     
-    // Placeholder function for creating an image embedding
+    // MARK: - CLIP / Image Embeddings
+    
     public func make_image_embed(_ image_path: String) -> Bool {
         return true
     }
     
+    // MARK: - Session / State
+    
     public func ForgotLastNTokens(_ N: Int32) {
-        
     }
     
     public func load_state(){
-        
     }
     
     public func delete_state() {
     }
     
     public func save_state(){
-        
     }
     
-    // Evaluates the input tokens and updates the logits
-    public func llm_eval(inputBatch: inout [ModelToken]) throws -> Bool {
+    // MARK: - Evaluation
+    
+    public func llm_decode(inputBatch: inout [ModelToken]) throws -> Bool {
         return false
     }
 
-    // Evaluates the CLIP model
     public func llm_eval_clip() throws -> Bool {
         return true
     }
     
-    // Simple topK, topP, temp sampling, with repeat penalty
     public func llm_sample() -> ModelToken {
-        return 0;
+        return 0
     }
     
-    // Initializes the logits for the model
+    // MARK: - Logits Initialization
+    
     func llm_init_logits() throws -> Bool {
         do {
             var inputs = [llm_token_bos(), llm_token_eos()]
             try ExceptionCather.catchException {
-                _ = try? llm_eval(inputBatch: &inputs)
+                _ = try? llm_decode(inputBatch: &inputs)
             }
             return true
         } catch {
-            print(error)
+            print("llm_init_logits() error: \(error)")
             throw error
         }
     }
     
-    // Converts a token to its string representation
     public func LLMTokenToStr(outputToken: Int32) -> String? {
         return nil
     }
     
-    // Evaluates a system prompt
+    // MARK: - System Prompt & Image Evaluation
+    
     public func _eval_system_prompt(system_prompt: String? = nil) throws {
-        if system_prompt != nil{
-            var system_pormpt_Tokens = try TokenizePrompt(system_prompt ?? "", .None)
-            var eval_res:Bool? = nil
+        if let sp = system_prompt, !sp.isEmpty {
+            var systemPromptTokens: [ModelToken] = try TokenizePrompt(sp, .None)
+            var evalResult: Bool? = nil
             try ExceptionCather.catchException {
-                eval_res = try? self.llm_eval(inputBatch: &system_pormpt_Tokens)
+                evalResult = try? self.llm_decode(inputBatch: &systemPromptTokens)
             }
-            if eval_res == false{
+            if evalResult == false {
                 throw ModelError.failedToEval
             }
-            self.nPast += Int32(system_pormpt_Tokens.count)
+            self.nPast += Int32(systemPromptTokens.count)
         }
     }
 
-    // Evaluates an image and generates embeddings
     public func _eval_img(img_path: String? = nil) throws {
         if let path = img_path {
             do {
@@ -242,23 +250,24 @@ public class LLMBase {
                     self.deinit_clip_model()
                 }
             } catch {
-                print(error)
+                print("_eval_img() error: \(error)")
                 throw error
             }
         }
     }
     
-    // Performs context rotation to handle context size limits
+    // MARK: - Context Rotation
+    
     public func KVShift() throws {
         self.nPast = self.nPast / 2
         try ExceptionCather.catchException {
             var in_batch = [self.llm_token_eos()]
-            _ = try? self.llm_eval(inputBatch: &in_batch)
+            _ = try? self.llm_decode(inputBatch: &in_batch)
         }
-//        print("Context Limit!")
     }
-
-    // Checks if a token should be skipped
+    
+    // MARK: - Token Skipping
+    
     public func CheckSkipTokens(_ token: Int32) -> Bool {
         for skip in self.contextParams.skip_tokens {
             if skip == token {
@@ -267,52 +276,81 @@ public class LLMBase {
         }
         return true
     }
-
-    // Evaluates input tokens in batches and calls the callback function after each batch
-    public func EvalInputTokensBatched(inputTokens: inout [ModelToken],callback: ((String, Double) -> Bool)) throws -> Void {
+    
+    // MARK: - Batched Evaluation
+    
+    public func EvalInputTokensBatched(inputTokens: inout [ModelToken],
+                                       callback: ((String, Double) -> Bool)) throws {
         var inputBatch: [ModelToken] = []
-        while inputTokens.count > 0 {
+        
+        while !inputTokens.isEmpty {
             inputBatch.removeAll()
-            // See how many to eval (up to batch size??? or can we feed the entire input)
-            // Move tokens to batch
             let evalCount = min(inputTokens.count, Int(sampleParams.n_batch))
-            inputBatch.append(contentsOf: inputTokens[0 ..< evalCount])
+            inputBatch.append(contentsOf: inputTokens[0..<evalCount])
             inputTokens.removeFirst(evalCount)
 
-            if self.nPast + Int32(inputBatch.count) >= self.contextParams.context{
+            if self.nPast + Int32(inputBatch.count) >= self.contextParams.context {
                 try self.KVShift()
-//                _ = callback(" `C_LIMIT` ", 0)
+                // Optionally notify the callback about the context limit
+                // _ = callback(CONTEXT_LIMIT_MARKER, 0)
             }
-            var eval_res:Bool? = nil
+            
+            var evalResult: Bool? = nil
             try ExceptionCather.catchException {
-                eval_res = try? self.llm_eval(inputBatch: &inputBatch)
+                evalResult = try? self.llm_decode(inputBatch: &inputBatch)
             }
-            if eval_res == false{
+            if evalResult == false {
                 throw ModelError.failedToEval
             }
             self.nPast += Int32(evalCount)
         }
     }
-
-    // Generates predictions based on input text and optional image/system prompts
-    public func Predict(_ input: String, _ evalCallback: ((String, Double) -> Bool),
-                        system_prompt: String? = nil,
-                        img_path: String? = nil,
-                        infoCallback: ((String,Any) -> Void)? = nil) throws -> String {
-        //Eval system prompt then image if it's not nil
+    
+    // MARK: - Prediction
+    
+    /**
+     Generates predictions from the model given an input text.
+     
+     - Parameters:
+       - input: The user input text.
+       - evalCallback: A closure that receives generated tokens as strings, plus timing.
+                      Return `true` to stop generation early.
+       - system_prompt: (Optional) A system prompt for the context, usually run once at the start.
+       - img_path: (Optional) An image path for generating embeddings.
+       - infoCallback: A closure to receive debug or info metrics, e.g. token counts.
+       - stopWhenContextLimitReach: Whether to stop generation if the context is forced to shift.
+                                    Defaults to `true`.
+     
+     - Throws:
+       - `ModelError.inputTooLong` if tokens exceed the context size.
+       - `ModelError.failedToEval` if the internal model evaluation fails.
+     
+     - Returns: The full generated string after final token is generated or generation ends.
+     */
+    public func Predict(
+        _ input: String,
+        _ evalCallback: ((String, Double) -> Bool),
+        system_prompt: String? = nil,
+        img_path: String? = nil,
+        infoCallback: ((String, Any) -> Void)? = nil,
+        stopWhenContextLimitReach: Bool = true
+    ) throws -> String {
+        
+        // Evaluate system prompt if needed
         if self.nPast == 0 {
-            try _eval_system_prompt(system_prompt:system_prompt)
+            try _eval_system_prompt(system_prompt: system_prompt)
         }
-        try _eval_img(img_path:img_path)
+        try _eval_img(img_path: img_path)
 
         let contextLength = Int32(contextParams.context)
         print("Past token count: \(nPast)/\(contextLength) (\(past.count))")
-        // Tokenize with prompt format
+        
         do {
+            // Tokenize user input
             var inputTokens = try TokenizePrompt(input, self.contextParams.promptFormat)
-            infoCallback?("itc",inputTokens.count)
+            infoCallback?("itc", inputTokens.count)
             
-            if inputTokens.count == 0 && img_path == nil{
+            if inputTokens.isEmpty && img_path == nil {
                 return "Empty input."
             }
             let inputTokensCount = inputTokens.count
@@ -322,96 +360,100 @@ public class LLMBase {
                 throw ModelError.inputTooLong
             }
 
-            var inputBatch: [ModelToken] = []
-
-            //Batched Eval all input tokens
-            try EvalInputTokensBatched(inputTokens: &inputTokens, callback:evalCallback)
-            // Output
+            // Evaluate the batched input tokens
+            try EvalInputTokensBatched(inputTokens: &inputTokens, callback: evalCallback)
+            
+            // Prepare output state
             outputRepeatTokens = []
             var output = [String]()
-            // Loop until target count is reached
             var completion_loop = true
-            // let eos_token = llm_token_eos()
+            
             while completion_loop {
-                // Pull a generation from context
-                var outputToken:Int32 = -1
+                var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
                     outputToken = self.llm_sample()
                 }
-                // Repeat tokens update
+                
+                // Update repeat tokens
                 outputRepeatTokens.append(outputToken)
                 if outputRepeatTokens.count > sampleParams.repeat_last_n {
                     outputRepeatTokens.removeFirst()
                 }
-                // Check for eos - end early - check eos before bos in case they are the same
-                // if outputToken == eos_token {
-                //     completion_loop = false
-                //     print("[EOS]")
-                //     break
-                // }
-                if llm_token_is_eog(token:outputToken) {
-                    completion_loop = true
+                
+                // Check end-of-generation
+                if llm_token_is_eog(token: outputToken) {
+                    completion_loop = false
                     print("[EOG]")
                     break
                 }
-
-                // Check for BOS and tokens in skip list
+                
+                // Handle skip tokens
                 var skipCallback = false
-                if !self.CheckSkipTokens(outputToken){
+                if !CheckSkipTokens(outputToken) {
                     print("Skip token: \(outputToken)")
                     skipCallback = true
                 }
-                // Convert token to string and callback
-                if !skipCallback, let str = LLMTokenToStr(outputToken: outputToken){
+                
+                // Convert token to string + callback
+                if !skipCallback, let str = LLMTokenToStr(outputToken: outputToken) {
                     output.append(str)
-                    // Per token callback
-                     let (output, time) = Utils.time {
-                         return str
-                     }
-                     if evalCallback(output, time) {
-                        // Early exit if requested by callback
+                    let (textChunk, time) = Utils.time {
+                        return str
+                    }
+                    // If callback returns true, break
+                    if evalCallback(textChunk, time) {
                         print(" * exit requested by callback *")
                         completion_loop = false
                         break
                     }
                 }
-                // Max output tokens count reached
-                if (self.contextParams.n_predict != 0 && output.count>self.contextParams.n_predict){
+                
+                // Check n_predict limit
+                if self.contextParams.n_predict != 0 && output.count > self.contextParams.n_predict {
                     print(" * n_predict reached *")
                     completion_loop = false
                     break
                 }
-                // Check if we need to run another response eval
+                
+                // Evaluate next token if continuing
                 if completion_loop {
-                    // Send generated token back into model for next generation
-                    var eval_res:Bool? = nil
-                    if self.nPast >= self.contextParams.context - 2{
+                    // Check if near the end of context
+                    if self.nPast >= self.contextParams.context - 2 {
                         try self.KVShift()
-                        _ = evalCallback(" `C_LIMIT` ",0)
+                        _ = evalCallback(CONTEXT_LIMIT_MARKER, 0)
+                        
+                        // If the user wants to stop when the context limit is reached
+                        if stopWhenContextLimitReach {
+                            print(" * context limit reached, stop generation *")
+                            completion_loop = false
+                            break
+                        }
                     }
+                    
+                    var evalResult: Bool? = nil
                     try ExceptionCather.catchException {
-                        inputBatch = [outputToken]
-                        eval_res = try? self.llm_eval(inputBatch: &inputBatch)
+                        var inputBatch = [outputToken]
+                        evalResult = try? self.llm_decode(inputBatch: &inputBatch)
                     }
-                    if eval_res == false{
+                    if evalResult == false {
                         print("Eval res false")
                         throw ModelError.failedToEval
                     }
                     nPast += 1
                 }
             }
+            
             print("Total tokens: \(inputTokensCount + output.count) (\(inputTokensCount) -> \(output.count))")
-            infoCallback?("otc",output.count)
-            // print("Past token count: \(nPast)/\(contextLength) (\(past.count))")
-            // Return full string for case without callback
+            infoCallback?("otc", output.count)
             return output.joined()
-        }catch{
-            print(error)
+        } catch {
+            print("Predict error: \(error)")
             throw error
         }
     }
-
-    // Tokenizes the input string based on the given style
+    
+    // MARK: - Prompt Tokenization
+    
     public func TokenizePrompt(_ input: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
@@ -420,76 +462,69 @@ public class LLMBase {
         case .Custom:
             print("LLMBase.TokenizePrompt: use custom Jinja2 Chat Template")
             return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format)
-         }
+        }
     }
 
-    // Tokenizes input with both system and prompt strings
-    public func TokenizePromptWithSystem(_ input: String, _ systemPrompt: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
+    public func TokenizePromptWithSystem(_ input: String,
+                                         _ systemPrompt: String,
+                                         _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
             print("LLMBase.TokenizePromptWithSystem: use model default Jinja2 Chat Template")
             return LLMTokenize(input, systemPrompt: systemPrompt)
         case .Custom:
             print("LLMBase.TokenizePromptWithSystem: use custom Jinja2 Chat Template")
-            return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format, systemPrompt: systemPrompt)
-         }
+            return LLMTokenize(input,
+                               chatTemplate: self.contextParams.custom_prompt_format,
+                               systemPrompt: systemPrompt)
+        }
     }
 
-    // Parses and adds tokens to be skipped during processing
     public func parse_skip_tokens(){
-        // This function must be called after model loaded
-        // Add BOS token to skip
         self.contextParams.skip_tokens.append(self.llm_token_bos())
-
-        let splited_skip_tokens = self.contextParams.skip_tokens_str.components(separatedBy: [","])
-        for word in splited_skip_tokens{
-            let tokenized_skip = self.LLMTokenize(word,add_bos: false,parse_special: true)
-            // Add only if tokenized text is one token
-            if tokenized_skip.count == 1{
-                self.contextParams.skip_tokens.append(tokenized_skip[0])
+        let splitSkipTokens = self.contextParams.skip_tokens_str.components(separatedBy: [","])
+        for word in splitSkipTokens {
+            let tokenizedSkip = self.LLMTokenize(word, add_bos: false, parse_special: true)
+            if tokenizedSkip.count == 1 {
+                self.contextParams.skip_tokens.append(tokenizedSkip[0])
             }
         }
     }
     
-    public func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
-                            add_bos: Bool? = nil, parse_special: Bool? = nil) -> [ModelToken] {
+    public func LLMTokenize(
+        _ input: String,
+        chatTemplate: String? = nil,
+        systemPrompt: String? = nil,
+        add_bos: Bool? = nil,
+        parse_special: Bool? = nil
+    ) -> [ModelToken] {
         return []
     }
     
-    //MARK: chatsStream for Closures, Combine and Structured concurrency
+    // MARK: - Chats Streaming
     
-    // Result type for streaming chat responses
     public enum ChatStreamResult {
         case success(ModelResult)
         case failure(Error)
     }
 
-    // Model result type containing choices
     public struct ModelResult {
         public let choices: [String]
     }
 
-    // Closure-based streaming chat function
-    /*
-        llm.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { partialResult in
-        switch partialResult {
-            case .success(let result):
-                print(result.choices)
-            case .failure(let error):
-                //Handle chunk error here
-            }
-        } completion: { output, processing_time, chunk in
-            //Handle streaming error here with final output and processing time
-        }
-    */
-    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil,
-                          onPartialResult: @escaping (ChatStreamResult) -> Void,
-                          completion: @escaping (String, Double, Error?) -> Void) {
+    // MARK: - Closure-based streaming
+
+    public func chatsStream(
+        input: String,
+        system_prompt: String? = nil,
+        img_path: String? = nil,
+        onPartialResult: @escaping (ChatStreamResult) -> Void,
+        completion: @escaping (String, Double, Error?) -> Void
+    ) {
         do {
             let startTime = Date()
             let contextLength = Int32(self.contextParams.context)
             
-            // Initialize if first call
             if self.nPast == 0 {
                 try self._eval_system_prompt(system_prompt: system_prompt)
             }
@@ -497,8 +532,10 @@ public class LLMBase {
             
             print("Past token count: \(self.nPast)/\(contextLength) (\(self.past.count))")
             
-            var inputTokens = try self.TokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
-            if inputTokens.count == 0 && (img_path ?? "").isEmpty {
+            var inputTokens = try self.TokenizePromptWithSystem(input,
+                                                                system_prompt ?? "",
+                                                                self.contextParams.promptFormat)
+            if inputTokens.isEmpty && (img_path ?? "").isEmpty {
                 completion("", 0, ModelError.emptyInput)
                 return
             }
@@ -510,36 +547,30 @@ public class LLMBase {
                 throw ModelError.inputTooLong
             }
             
-            // Process input tokens in batches
-            try self.EvalInputTokensBatched(inputTokens: &inputTokens) { str, _ in true }
+            try self.EvalInputTokensBatched(inputTokens: &inputTokens) { _, _ in true }
             
-            // Reset output state
             self.outputRepeatTokens = []
-            var output_cache = [String]()
-            var full_output = [String]()
+            var outputCache = [String]()
+            var fullOutput = [String]()
             var completion_loop = true
             
             while completion_loop {
-                // Sample next token
                 var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
                     outputToken = self.llm_sample()
                 }
                 
-                // Update repeat tokens
                 self.outputRepeatTokens.append(outputToken)
                 if self.outputRepeatTokens.count > self.sampleParams.repeat_last_n {
                     self.outputRepeatTokens.removeFirst()
                 }
                 
-                // Check for end of generation
                 if self.llm_token_is_eog(token: outputToken) {
                     completion_loop = false
                     print("[EOG]")
                     break
                 }
                 
-                // Handle token output
                 var skipCallback = false
                 if !self.CheckSkipTokens(outputToken) {
                     print("Skip token: \(outputToken)")
@@ -547,104 +578,80 @@ public class LLMBase {
                 }
                 
                 if !skipCallback, let str = self.LLMTokenToStr(outputToken: outputToken) {
-                    output_cache.append(str)
-                    full_output.append(str)
-                    if output_cache.count >= self.contextParams.predict_cache_length {
-                        let chunk = output_cache.joined()
-                        output_cache = []
+                    outputCache.append(str)
+                    fullOutput.append(str)
+                    
+                    if outputCache.count >= self.contextParams.predict_cache_length {
+                        let chunk = outputCache.joined()
+                        outputCache.removeAll()
                         onPartialResult(.success(ModelResult(choices: [chunk])))
-                        // also append to full_output for final usage
                     }
                 }
                 
-                // Check output limit
-                let output_count = output_cache.count
-                if self.contextParams.n_predict != 0 && output_count > self.contextParams.n_predict {
+                let outputCount = fullOutput.count
+                if self.contextParams.n_predict != 0 && outputCount > self.contextParams.n_predict {
                     print(" * n_predict reached *")
                     completion_loop = false
                     break
                 }
                 
-                // Handle context rotation
                 if completion_loop {
                     if self.nPast >= self.contextParams.context - 2 {
                         try self.KVShift()
-                        onPartialResult(.success(ModelResult(choices: [" `C_LIMIT` "])))
+                        onPartialResult(.success(ModelResult(choices: [CONTEXT_LIMIT_MARKER])))
                     }
                     
-                    // Feed generated token back
-                    var eval_res: Bool? = nil
+                    var evalResult: Bool? = nil
                     try ExceptionCather.catchException {
                         var inputBatch = [outputToken]
-                        eval_res = try? self.llm_eval(inputBatch: &inputBatch)
+                        evalResult = try? self.llm_decode(inputBatch: &inputBatch)
                     }
-                    if eval_res == false {
+                    if evalResult == false {
                         throw ModelError.failedToEval
                     }
                     self.nPast += 1
                 }
             }
             
-            // Send any remaining cached output
-            if !output_cache.isEmpty {
-                let chunk = output_cache.joined()
-                full_output.append(chunk)
+            if !outputCache.isEmpty {
+                let chunk = outputCache.joined()
+                fullOutput.append(chunk)
                 onPartialResult(.success(ModelResult(choices: [chunk])))
             }
             
             let endTime = Date()
-            let processingTime = endTime.timeIntervalSince(startTime) * 1000 // Convert to milliseconds
+            let processingTime = endTime.timeIntervalSince(startTime) * 1000
             
-            print("Total tokens: \(inputTokensCount + full_output.count) (\(inputTokensCount) -> \(full_output.count))")
-            completion(full_output.joined(), processingTime, nil)
+            print("Total tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
+            completion(fullOutput.joined(), processingTime, nil)
+            
         } catch {
             completion("", 0, error)
         }
     }
     
-    // Combine-based streaming chat function
-    /*
-     if let model = ai.model {
-         model.chatsStream(input: input_text)
-             .sink(
-                 receiveCompletion: { completion in
-                     switch completion {
-                     case .finished:
-                         print("Stream completed successfully")
-                     case .failure(let error):
-                         print("Stream error: \(error)")
-                     }
-                 },
-                 receiveValue: { modelResult in
-                     // Print each chunk of generated text
-                     print(modelResult.choices)
-                 }
-             )
-             .store(in: &cancellables)
-     }
-    */
-    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AnyPublisher<ModelResult, Error> {
+    // MARK: - Combine-based streaming
+    
+    public func chatsStream(
+        input: String,
+        system_prompt: String? = nil,
+        img_path: String? = nil
+    ) -> AnyPublisher<ModelResult, Error> {
         let subject = PassthroughSubject<ModelResult, Error>()
         
-        // Call the original streaming method
         self.chatsStream(
             input: input,
             system_prompt: system_prompt,
             img_path: img_path,
             onPartialResult: { partialResult in
-                // partialResult is a ChatStreamResult
-                // which can be .success(ModelResult) or .failure(Error).
                 switch partialResult {
                 case .success(let modelResult):
-                    // Emit partial output
                     subject.send(modelResult)
                 case .failure(let error):
-                    // Immediately fail the publisher
                     subject.send(completion: .failure(error))
                 }
             },
-            completion: { output, processingTime, error in
-                // The final completion callback after streaming finishes
+            completion: { _, _, error in
                 if let error = error {
                     subject.send(completion: .failure(error))
                 } else {
@@ -653,26 +660,30 @@ public class LLMBase {
             }
         )
         
-        // Return the subject as an AnyPublisher
         return subject.eraseToAnyPublisher()
     }
     
-    // AsyncSequence-based streaming chat function
-    /*
-        for try await result in openAI.chatsStream(query: query) {
-            //Handle result here
-        }
-    */
-    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil) -> AsyncThrowingStream<ModelResult, Error> {
+    // MARK: - AsyncSequence-based streaming
+    
+    public func chatsStream(
+        input: String,
+        system_prompt: String? = nil,
+        img_path: String? = nil
+    ) -> AsyncThrowingStream<ModelResult, Error> {
+        
         return AsyncThrowingStream { continuation in
-            self.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { result in
-                switch result {
+            self.chatsStream(
+                input: input,
+                system_prompt: system_prompt,
+                img_path: img_path
+            ) { partialResult in
+                switch partialResult {
                 case .success(let modelResult):
                     continuation.yield(modelResult)
                 case .failure(let error):
                     continuation.finish(throwing: error)
                 }
-            } completion: { output, processingTime, error in
+            } completion: { _, _, error in
                 if let error = error {
                     continuation.finish(throwing: error)
                 } else {

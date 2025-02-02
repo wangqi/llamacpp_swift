@@ -399,11 +399,7 @@ public class LLaMa: LLMBase {
      - Throws: Rethrows any bridging errors encountered.
      */
     public override func llm_decode(inputBatch: inout [ModelToken]) throws -> Bool {
-        
-        // Potential mismatch: "llm_eval" typically calls something like llama_eval(...),
-        // but the bridging layer might have "llama_decode" do the same job.
-        if llama_decode(context, llama_batch_get_one(&inputBatch, Int32(inputBatch.count))) != 0
-        {
+        if llama_decode(context,llama_batch_get_one(&inputBatch, Int32(inputBatch.count))) != 0 {
             print("failed to evaluate llama!")
             return false
         }

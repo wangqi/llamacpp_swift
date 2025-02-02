@@ -38,6 +38,7 @@ if ai.model == nil {
 }
 
 // Configure sampling parameters
+ai.model?.sampleParams.temp = 0.6
 ai.model?.sampleParams.mirostat = 2
 ai.model?.sampleParams.mirostat_eta = 0.1
 ai.model?.sampleParams.mirostat_tau = 5.0

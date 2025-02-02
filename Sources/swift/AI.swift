@@ -129,38 +129,60 @@ public class AI {
             }
 
             // Model output
-            var output:String? = ""
-            do{
-                try ExceptionCather.catchException {
-                    output = try? self.model?.Predict(input,
-                        { str, time in
-                            if self.flagExit {
-                                // Reset flag
-                                self.flagExit = false
-                                // Alert model of exit flag
-                                return true
+            var output = ""
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            try? self.model?.chatsStream(
+                input: input,
+                system_prompt: system_prompt,
+                img_path: img_path,
+                onPartialResult: { result in
+                    switch result {
+                    case .success(let modelResult):
+                        if self.flagExit {
+                            // Reset flag
+                            self.flagExit = false
+                            semaphore.signal()
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            if modelResult.choices == LLMBase.CONTEXT_LIMIT_MARKER {
+                                tokenCallback?(modelResult.choices + "(max context reached)", modelResult.time)
+                            } else {
+                                tokenCallback?(modelResult.choices, modelResult.time)
                             }
-                            DispatchQueue.main.async {
-                                tokenCallback?(str, time)
-                            }
-                            return false
-                        },
-                        system_prompt:system_prompt,
-                        img_path:img_path,
-                        infoCallback:{str, obj in
-                            infoCallBack?(str, obj)
-                        })
+                        }
+                    case .failure(_):
+                        semaphore.signal()
+                    }
+                },
+                shouldContinue: { result in
+                    switch result {
+                    case .success(_):
+                        return !self.flagExit
+                    case .failure(_):
+                        return false
+                    }
+                },
+                infoCallback: { str, obj in
+                    infoCallBack?(str, obj)
+                },
+                stopWhenContextLimitReach: true,
+                completion: { finalResult, time, error in
+                    if let error = error {
+                        output = "[Error] \(error.localizedDescription)"
+                    } else {
+                        output = finalResult ?? ""
+                    }
+                    semaphore.signal()
                 }
-            } catch {
-                print(error)
-                DispatchQueue.main.async {
-                    self.flagResponding = false
-                    completion("[Error] \(error)")
-                }
-            }
+            )
+            
+            semaphore.wait()
+            
             DispatchQueue.main.async {
                 self.flagResponding = false
-                completion(output ?? "")
+                completion(output)
             }
 
         }
@@ -613,4 +635,3 @@ public enum ModelPromptStyle {
 }
 
 public typealias ModelToken = Int32
-

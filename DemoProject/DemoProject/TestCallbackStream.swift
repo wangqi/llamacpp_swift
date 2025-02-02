@@ -7,7 +7,7 @@ func testCallbackStream(ai: AI, query: String) {
         model.chatsStream(input: query) { partialResult in
             switch partialResult {
             case .success(let result):
-                print(result.choices.joined(), terminator: "")
+                print(result.choices, terminator: "")
             case .failure(let error):
                 print("ERROR: \(error)")
             }

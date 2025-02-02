@@ -20,7 +20,7 @@ public class LLMBase {
     // MARK: - Constants
     
     /// A special marker used when the context limit is reached.
-    private let CONTEXT_LIMIT_MARKER = " `C_LIMIT` "
+    public static let CONTEXT_LIMIT_MARKER = " `C_LIMIT` "
     
     // MARK: - Properties
     
@@ -287,7 +287,7 @@ public class LLMBase {
             if self.nPast + Int32(inputBatch.count) >= self.contextParams.context {
                 try self.KVShift()
                 // Optionally notify the callback about the context limit
-                 _ = callback(CONTEXT_LIMIT_MARKER, 0)
+                _ = callback(LLMBase.CONTEXT_LIMIT_MARKER, 0)
             }
             
             var evalResult: Bool? = nil
@@ -324,132 +324,46 @@ public class LLMBase {
      */
     public func Predict(
         _ input: String,
-        _ evalCallback: ((String, Double) -> Bool),
+        _ evalCallback: @escaping ((String, Double) -> Bool),
         system_prompt: String? = nil,
         img_path: String? = nil,
         infoCallback: ((String, Any) -> Void)? = nil,
         stopWhenContextLimitReach: Bool = true
     ) throws -> String {
+        var finalOutput = ""
+        let semaphore = DispatchSemaphore(value: 0)
         
-        // Evaluate system prompt if needed
-        if self.nPast == 0 {
-            print("LLMBase.Predict: Evaluating system prompt \(system_prompt)")
-            try _eval_system_prompt(system_prompt: system_prompt)
-        }
-        try _eval_img(img_path: img_path)
-
-        let contextLength = Int32(contextParams.context)
-        print("Past token count: \(nPast)/\(contextLength) (\(past.count))")
+        chatsStream(
+            input: input,
+            system_prompt: system_prompt,
+            img_path: img_path,
+            onPartialResult: { result in
+                switch result {
+                case .success(let modelResult):
+                    let cont = evalCallback(modelResult.choices, modelResult.time)
+                    if !cont { semaphore.signal() }
+                case .failure(_):
+                    semaphore.signal()
+                }
+            },
+            shouldContinue: { result in
+                switch result {
+                case .success(let modelResult):
+                    return evalCallback(modelResult.choices, modelResult.time)
+                case .failure(_):
+                    return false
+                }
+            },
+            infoCallback: infoCallback,
+            stopWhenContextLimitReach: stopWhenContextLimitReach,
+            completion: { output, time, error in
+                finalOutput = output
+                semaphore.signal()
+            }
+        )
         
-        do {
-            // Tokenize user input
-            var inputTokens = try TokenizePrompt(input, self.contextParams.promptFormat)
-            infoCallback?("Input Token Count:", inputTokens.count)
-            
-            if inputTokens.isEmpty && img_path == nil {
-                return "Empty input."
-            }
-            let inputTokensCount = inputTokens.count
-            print("Input tokens: \(inputTokens)")
-
-            if inputTokensCount > contextLength {
-                throw ModelError.inputTooLong
-            }
-
-            // Evaluate the batched input tokens
-            try EvalInputTokensBatched(inputTokens: &inputTokens, callback: evalCallback)
-            
-            // Prepare output state
-            outputRepeatTokens.removeAll()
-            var output = [String]()
-            var outputTokens = [Int]()
-            var completion_loop = true
-            
-            while completion_loop {
-                var outputToken: Int32 = -1
-                try ExceptionCather.catchException {
-                    outputToken = self.llm_sample()
-                    outputTokens.append(Int(outputToken))
-                }
-                
-                // Update repeat tokens
-                outputRepeatTokens.append(outputToken)
-                if outputRepeatTokens.count > sampleParams.repeat_last_n {
-                    outputRepeatTokens.removeFirst()
-                }
-                
-                // Check end-of-generation
-                if llm_token_is_eog(token: outputToken) {
-                    print("\nLLMBase.Predict: Reached end-of-generation. outputToken: \(outputToken)")
-                    completion_loop = false
-                    print("[EOG]")
-                    break
-                }
-                
-                // Handle skip tokens
-                var skipCallback = false
-                if !CheckSkipTokens(outputToken) {
-                    print("Skip token: \(outputToken)")
-                    skipCallback = true
-                }
-                
-                // Convert token to string + callback
-                if !skipCallback, let str = LLMTokenToStr(outputToken: outputToken) {
-                    output.append(str)
-                    let (textChunk, time) = Utils.time {
-                        return str
-                    }
-                    // If callback returns true, break
-                    if evalCallback(textChunk, time) {
-                        print(" * exit requested by callback *")
-                        completion_loop = false
-                        break
-                    }
-                }
-                
-                // Check n_predict limit
-                if self.contextParams.n_predict != 0 && output.count > self.contextParams.n_predict {
-                    print(" * n_predict reached *")
-                    completion_loop = false
-                    break
-                }
-                
-                // Evaluate next token if continuing
-                if completion_loop {
-                    // Check if near the end of context
-                    if self.nPast >= self.contextParams.context - 2 {
-                        try self.KVShift()
-                        _ = evalCallback(CONTEXT_LIMIT_MARKER, 0)
-                        
-                        // If the user wants to stop when the context limit is reached
-                        if stopWhenContextLimitReach {
-                            print(" * context limit reached, stop generation *")
-                            completion_loop = false
-                            break
-                        }
-                    }
-                    
-                    var evalResult: Bool? = nil
-                    try ExceptionCather.catchException {
-                        var inputBatch = [outputToken]
-                        evalResult = try? self.llm_decode(inputBatch: &inputBatch)
-                    }
-                    if evalResult == false {
-                        print("Eval res false")
-                        throw ModelError.failedToEval
-                    }
-                    nPast += 1
-                }
-            }
-            
-            print("Total tokens: \(inputTokensCount + output.count) (\(inputTokensCount) -> \(output.count))")
-            print("Output Tokens[\(outputTokens.count)]", outputTokens)
-            print("nPast: \(nPast)")
-            return output.joined()
-        } catch {
-            print("Predict error: \(error)")
-            throw error
-        }
+        semaphore.wait()
+        return finalOutput
     }
     
     // MARK: - Prompt Tokenization
@@ -509,7 +423,8 @@ public class LLMBase {
     }
 
     public struct ModelResult {
-        public let choices: [String]
+        public let choices: String
+        public let time: Double
     }
 
     // MARK: - Closure-based streaming
@@ -519,6 +434,9 @@ public class LLMBase {
         system_prompt: String? = nil,
         img_path: String? = nil,
         onPartialResult: @escaping (ChatStreamResult) -> Void,
+        shouldContinue: ((ChatStreamResult) -> Bool)? = nil,
+        infoCallback: ((String, Any) -> Void)? = nil,
+        stopWhenContextLimitReach: Bool = true,
         completion: @escaping (String, Double, Error?) -> Void
     ) {
         do {
@@ -584,7 +502,7 @@ public class LLMBase {
                     if outputCache.count >= self.contextParams.predict_cache_length {
                         let chunk = outputCache.joined()
                         outputCache.removeAll()
-                        onPartialResult(.success(ModelResult(choices: [chunk])))
+                        onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
                     }
                 }
                 
@@ -598,7 +516,14 @@ public class LLMBase {
                 if completion_loop {
                     if self.nPast >= self.contextParams.context - 2 {
                         try self.KVShift()
-                        onPartialResult(.success(ModelResult(choices: [CONTEXT_LIMIT_MARKER])))
+                        onPartialResult(.success(ModelResult(choices: LLMBase.CONTEXT_LIMIT_MARKER, time: 0)))
+                        
+                        // If the user wants to stop when the context limit is reached
+                        if stopWhenContextLimitReach {
+                            print(" * context limit reached, stop generation *")
+                            completion_loop = false
+                            break
+                        }
                     }
                     
                     var evalResult: Bool? = nil
@@ -616,7 +541,7 @@ public class LLMBase {
             if !outputCache.isEmpty {
                 let chunk = outputCache.joined()
                 fullOutput.append(chunk)
-                onPartialResult(.success(ModelResult(choices: [chunk])))
+                onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
             }
             
             let endTime = Date()

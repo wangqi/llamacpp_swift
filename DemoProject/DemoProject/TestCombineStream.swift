@@ -16,7 +16,7 @@ func testCombineStream(ai: AI, query: String) {
                     print("\nStream failed with error: \(error)")
                 }
             } receiveValue: { partialResult in
-                let chunk = partialResult.choices.joined()
+                let chunk = partialResult.choices
                 print(chunk, terminator: "")
             }
             .store(in: &cancellables)

@@ -6,7 +6,7 @@ func testStructuredStream(ai: AI, query: String) async {
     if let model = ai.model {
         do {
             for try await result in model.chatsStream(input: query) {
-                print(result.choices.joined(), terminator: "")
+                print(result.choices, terminator: "")
             }
         } catch {
             print("Error: \(error)")

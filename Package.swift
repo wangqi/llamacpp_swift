@@ -48,7 +48,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master"),
-        .package(url: "https://github.com/wangqi/Jinja", branch: "master"),
+        .package(url: "https://github.com/wangqi/Jinja", branch: "main"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0")
     ],
     targets: [

@@ -41,6 +41,10 @@ public class LLMBase {
     var past: [[ModelToken]] = []
     public var nPast: Int32 = 0
     
+    var llm_bos_token: ModelToken?
+    var llm_eos_token: ModelToken?
+    var llm_nl_token: ModelToken?
+    
     // MARK: - Initialization
     
     public init(path: String, contextParams: ModelAndContextParams = .default) throws {
@@ -139,31 +143,26 @@ public class LLMBase {
     }
     
     public func llm_token_nl() -> ModelToken {
-        return 13
+        return llm_nl_token ?? 13
     }
     
     public func llm_token_bos() -> ModelToken {
-        print("llm_token_bos base")
-        return 0
+        return llm_bos_token ?? 0
     }
     
     public func llm_token_eos() -> ModelToken {
-        print("llm_token_eos base")
-        return 0
+        return llm_eos_token ?? 0
     }
     
     func llm_n_vocab(_ ctx: OpaquePointer!) -> Int32 {
-        print("llm_n_vocab base")
         return 0
     }
     
     func llm_get_logits(_ ctx: OpaquePointer!) -> UnsafeMutablePointer<Float>? {
-        print("llm_get_logits base")
         return nil
     }
     
     func llm_get_n_ctx(ctx: OpaquePointer!) -> Int32 {
-        print("llm_get_n_ctx base")
         return 0
     }
     
@@ -334,6 +333,7 @@ public class LLMBase {
         
         // Evaluate system prompt if needed
         if self.nPast == 0 {
+            print("LLMBase.Predict: Evaluating system prompt \(system_prompt)")
             try _eval_system_prompt(system_prompt: system_prompt)
         }
         try _eval_img(img_path: img_path)
@@ -360,14 +360,16 @@ public class LLMBase {
             try EvalInputTokensBatched(inputTokens: &inputTokens, callback: evalCallback)
             
             // Prepare output state
-            outputRepeatTokens = []
+            outputRepeatTokens.removeAll()
             var output = [String]()
+            var outputTokens = [Int]()
             var completion_loop = true
             
             while completion_loop {
                 var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
                     outputToken = self.llm_sample()
+                    outputTokens.append(Int(outputToken))
                 }
                 
                 // Update repeat tokens
@@ -378,6 +380,7 @@ public class LLMBase {
                 
                 // Check end-of-generation
                 if llm_token_is_eog(token: outputToken) {
+                    print("\nLLMBase.Predict: Reached end-of-generation. outputToken: \(outputToken)")
                     completion_loop = false
                     print("[EOG]")
                     break
@@ -440,7 +443,8 @@ public class LLMBase {
             }
             
             print("Total tokens: \(inputTokensCount + output.count) (\(inputTokensCount) -> \(output.count))")
-            infoCallback?("otc", output.count)
+            print("Output Tokens[\(outputTokens.count)]", outputTokens)
+            print("nPast: \(nPast)")
             return output.joined()
         } catch {
             print("Predict error: \(error)")

@@ -216,12 +216,8 @@ public func spm_llama_model_chat_template(
 
 /// Swift version of `spm_llama_sampling_sample(...)`.
 /// We assume that `ctxSampling` is a chain sampler from `init_sampling(...)`.
-public func spm_llama_sampling_sample(
-    ctxSampling: SpmSamplerContext?,
-    ctxMain: OpaquePointer?,  // llama_context*
-    idx: Int32 = -1,
-    grammarFirst: Bool = false
-) -> llama_token {
+public func spm_llama_sampling_sample(ctxSampling: SpmSamplerContext?, ctxMain: OpaquePointer?,
+                                      idx: Int32 = -1, grammarFirst: Bool = false) -> llama_token {
     guard let chain = ctxSampling?.chain, let cMain = ctxMain else {
         return -1
     }

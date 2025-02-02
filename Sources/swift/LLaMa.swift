@@ -179,6 +179,12 @@ public class LLaMa: LLMBase {
             eosToken: LLMTokenToStr(outputToken: llama_vocab_eos(self.vocab)) ?? "</s>"
         )
         
+        //Cache bos & eos tokens
+        llm_bos_token = llama_vocab_bos(self.vocab)
+        llm_eos_token = llama_vocab_eos(self.vocab)
+        llm_nl_token = llama_vocab_nl(self.vocab)
+        print("LLaMa.llm_load_model llm_bos_token: \(llm_bos_token) llm_eos_token: \(llm_eos_token) llm_nl_token: \(llm_nl_token) ")
+        
         return true
     }
     
@@ -417,7 +423,7 @@ public class LLaMa: LLMBase {
     public override func ForgotLastNTokens(_ N: Int32) {
         // BUG: Ignores N. The call below typically means "rm from seq_id = -1, pos = 0, end = -1",
         // which could remove the entire context or be an undefined range. Adjust accordingly.
-        llama_kv_cache_seq_rm(self.context, -1, 0, -1)
+        llama_kv_cache_seq_rm(self.context, -1, N, -1)
     }
 
     // MARK: - KVShift()
@@ -447,17 +453,6 @@ public class LLaMa: LLMBase {
         self.nPast -= n_discard
         self.nPast += 1
         // print("Context Limit!")
-    }
-    
-    // MARK: - llm_init_logits()
-    
-    /**
-     Placeholder. Currently returns true without doing anything.
-     Implement any required logic to ensure logits are valid
-     or state is ready before you sample or decode further.
-     */
-    override func llm_init_logits() throws -> Bool {
-        return true
     }
     
     // MARK: - LLaMa Batch Helpers
@@ -583,28 +578,10 @@ public class LLaMa: LLMBase {
         return new_token_str
     }
 
-    // MARK: - Token/ID checks
-    
-    /// Checks if token is "End of Generation" according to llama_vocab_is_eog.
-    /// This is not standard in official llama.cpp (only EOS is standard).
-    public override func llm_token_is_eog(token: ModelToken) -> Bool {
-        return llama_vocab_is_eog(self.vocab, token)
-    }
-    
     /// Returns the "newline" token if your bridging library has it.
     /// Not standard in upstream llama.cpp. Possibly a custom bridging function.
     public override func llm_token_nl() -> ModelToken {
         return llama_vocab_nl(self.vocab)
-    }
-    
-    /// Returns the "BOS" token from the bridging library if available.
-    public override func llm_token_bos() -> ModelToken {
-        return llama_vocab_bos(self.vocab)
-    }
-    
-    /// Returns the "EOS" token from the bridging library if available.
-    public override func llm_token_eos() -> ModelToken {
-        return llama_vocab_eos(self.vocab)
     }
     
     // MARK: - LLMTokenize()

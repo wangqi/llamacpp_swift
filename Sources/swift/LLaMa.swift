@@ -135,7 +135,7 @@ public class LLaMa: LLMBase {
 
         // Attempt model load with error capture
         try ExceptionCather.catchException {
-            self.model = llama_load_model_from_file(path, model_params)
+            self.model = llama_model_load_from_file(path, model_params)
             self.vocab = llama_model_get_vocab(model) // self.model is the same pointer if not nil
         }
         if self.model == nil {
@@ -147,7 +147,7 @@ public class LLaMa: LLMBase {
 
         // Attempt context creation
         try ExceptionCather.catchException {
-            self.context = llama_new_context_with_model(self.model, context_params)
+            self.context = llama_init_from_model(self.model, context_params)
         }
         if self.context == nil {
             return false
@@ -226,13 +226,15 @@ public class LLaMa: LLMBase {
            self.contextParams.state_dump_path != "" &&
            FileManager.default.fileExists(atPath: self.contextParams.state_dump_path)
         {
-            var tokens_tmp: [llama_token] = [Int32](repeating: 0, count: 4096)
+            print("LLaMa.load_state(): Loading state from \(self.contextParams.state_dump_path).")
+            let context_size: Int = Int(self.contextParams.context)
+            var tokens_tmp: [llama_token] = [Int32](repeating: 0, count: context_size)
             var tokens_count: Int = 0
             
             llama_state_load_file(self.context,
                                   self.contextParams.state_dump_path,
                                   tokens_tmp.mutPtr,
-                                  4096,
+                                  context_size,
                                   &tokens_count)
             // If tokens_count > 0, we treat the last token as nPast
             // This is a bit unusual: it means we stored the nPast as the last item in the token array.
@@ -240,6 +242,7 @@ public class LLaMa: LLMBase {
             if tokens_count > 0 {
                 self.outputRepeatTokens.append(contentsOf: tokens_tmp[0 ..< tokens_count-1])
                 self.nPast = tokens_tmp[tokens_count - 1]
+                print("LLaMa.load_state() nPast: \(self.nPast)")
             }
         }
     }
@@ -365,7 +368,18 @@ public class LLaMa: LLMBase {
     }
     
     // load_grammar is empty here—check if you really need to do something
-    public override func load_grammar(_ path:String) throws -> Void { }
+    public override func load_grammar(_ path: String) throws -> Void {
+        do {
+            try ExceptionCather.catchException {
+                if let ctx_sampling = self.ctx_sampling {
+                    spm_llama_load_grammar(model: self.model, ctx: ctx_sampling, grammarPath: path)
+                }
+            }
+        } catch {
+            print("load_grammar() error: \(error)")
+            throw error
+        }
+    }
 
     // MARK: - llm_decode()
     
@@ -514,12 +528,7 @@ public class LLaMa: LLMBase {
             result.deallocate()
         }
 
-        let nTokens = llama_token_to_piece(self.vocab,
-                                           token,
-                                           result,
-                                           8,
-                                           0,
-                                           /* parse_special_tokens: */ self.contextParams.parse_special_tokens)
+        let nTokens = llama_token_to_piece(self.vocab, token, result, 8, 0, self.contextParams.parse_special_tokens)
         
         if nTokens < 0 {
             // Negative means we need to allocate -nTokens capacity
@@ -528,11 +537,7 @@ public class LLaMa: LLMBase {
             defer {
                 newResult.deallocate()
             }
-            let nNewTokens = llama_token_to_piece(self.vocab,
-                                                  token,
-                                                  newResult,
-                                                  -nTokens,
-                                                  0,
+            let nNewTokens = llama_token_to_piece(self.vocab, token, newResult, -nTokens, 0,
                                                   self.contextParams.parse_special_tokens)
             
             let bufferPointer = UnsafeBufferPointer(start: newResult, count: Int(nNewTokens))

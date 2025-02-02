@@ -68,6 +68,7 @@ public class LLMBase {
             
             // Load grammar if specified
             if let grammarPath = self.contextParams.grammar_path, !grammarPath.isEmpty {
+                print("LLMBase.load_model(): Loading grammar from \(grammarPath)...")
                 try? self.load_grammar(grammarPath)
             }
             
@@ -114,18 +115,13 @@ public class LLMBase {
             n_gpu_layers = 100
             #endif
         }
+        print("LLMBase n_gpu_layers: \(n_gpu_layers)")
         return n_gpu_layers
     }
     
     // MARK: - Grammar
     
     public func load_grammar(_ path: String) throws {
-        do {
-            // Implement grammar loading logic if required
-        } catch {
-            print("load_grammar() error: \(error)")
-            throw error
-        }
     }
     
     // MARK: - Core LLM Calls
@@ -348,7 +344,7 @@ public class LLMBase {
         do {
             // Tokenize user input
             var inputTokens = try TokenizePrompt(input, self.contextParams.promptFormat)
-            infoCallback?("itc", inputTokens.count)
+            infoCallback?("Input Token Count:", inputTokens.count)
             
             if inputTokens.isEmpty && img_path == nil {
                 return "Empty input."

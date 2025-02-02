@@ -53,7 +53,10 @@ public struct SpmSamplingParams {
 /// We store the chain pointer as `UnsafeMutablePointer<llama_sampler>`.
 public final class SpmSamplerContext {
     public var chain: UnsafeMutablePointer<llama_sampler>?
-    public var grammarSampler: UnsafeMutablePointer<llama_sampler>?  // optional if you want grammar usage
+    public var grammarSampler: UnsafeMutablePointer<llama_sampler>?
+    // Store the previously accepted tokens in Swift
+    // e.g. newest token at index 0, older tokens at higher indices
+    public var prevTokens: [llama_token] = []
 
     public init() {}
 }
@@ -159,14 +162,28 @@ public func init_sampling(
         llama_sampler_chain_add(chainPtr, finalSampler)
     }
 
-    // 9) Optional grammar usage
-    // If we wanted to load grammar from file, do it here:
-    // let grammar = ...
-    // let grammarSamplerPtr = llama_sampler_init_grammar(model, grammar, "root")
-    // llama_sampler_chain_add(chainPtr, grammarSamplerPtr)
-    // ctx.grammarSampler = grammarSamplerPtr
+    // 9) Grammar
+    // use spm_llama_load_grammar instead
+    /*
+    if !params.grammarPath.isEmpty {
+        let grammar = params.grammarPath
+        let grammarSamplerPtr = llama_sampler_init_grammar(model, grammar, "root")
+        llama_sampler_chain_add(chainPtr, grammarSamplerPtr)
+        ctx.grammarSampler = grammarSamplerPtr
+    }
+    */
 
     return ctx
+}
+
+public func spm_llama_load_grammar(model: OpaquePointer?, ctx: SpmSamplerContext, grammarPath: String) -> Bool {
+    let grammarSamplerPtr = llama_sampler_init_grammar(model, grammarPath, "root")
+    llama_sampler_chain_add(ctx.chain, grammarSamplerPtr)
+    ctx.grammarSampler = grammarSamplerPtr
+    if grammarSamplerPtr == nil {
+        return true
+    }
+    return false
 }
 
 // MARK: load chat template
@@ -201,16 +218,20 @@ public func spm_llama_model_chat_template(
 /// We assume that `ctxSampling` is a chain sampler from `init_sampling(...)`.
 public func spm_llama_sampling_sample(
     ctxSampling: SpmSamplerContext?,
-    ctxMain: OpaquePointer?,    // llama_context*
+    ctxMain: OpaquePointer?,  // llama_context*
     idx: Int32 = -1,
     grammarFirst: Bool = false
 ) -> llama_token {
-    guard let chain = ctxSampling?.chain,
-          let cMain = ctxMain else {
+    guard let chain = ctxSampling?.chain, let cMain = ctxMain else {
         return -1
     }
     // The built-in function to sample a token from the last decode output:
     let token = llama_sampler_sample(chain, cMain, idx)
+    
+    // Also store the token in our Swift array
+    // We'll store the newest token at index 0
+    ctxSampling?.prevTokens.insert(token, at: 0)
+    
     return token
 }
 
@@ -218,7 +239,7 @@ public func spm_llama_sampling_sample(
 /// This calls `llama_sampler_accept(...)` on the chain to let it update internal state with the accepted token.
 public func spm_llama_sampling_accept(
     ctxSampling: SpmSamplerContext?,
-    ctxMain: OpaquePointer?,    // llama_context*
+    ctxMain: OpaquePointer?, // llama_context*
     token: llama_token,
     applyGrammar: Bool
 ) {
@@ -229,35 +250,215 @@ public func spm_llama_sampling_accept(
     // If you had a separate grammar sampler, you might do something custom with `applyGrammar`.
 }
 
-// End of GptSpm.swift
+// MARK: - Additional bridging needed to replicate the main loop
+// If GptSpm.swift cannot meet the requirements, we add them here:
 
-// MARK: Original package_helper.m functions
-
-
-/// Returns the resource path of the SwiftPM module’s bundle.
-/// (Equivalent to `SWIFTPM_MODULE_BUNDLE.resourcePath`.)
-/*
-func get_core_bundle_path() -> String {
-    // If for some reason `resourcePath` is nil, we fall back to ""
-    return Bundle.module.resourcePath ?? ""
-}
-*/
-
-/// Returns the hardware machine name via the C `uname` call.
-/// (Equivalent to `[NSString stringWithUTF8String:sysinfo.machine]` in Objective-C.)
-func Get_Machine_Hardware_Name() -> String? {
-    var sysinfo = utsname()
-    // uname(...) returns 0 on success
-    guard uname(&sysinfo) == 0 else {
-        return nil
+/// A bridging function for llama_batch_get_one + llama_decode
+public func spm_llama_decode(ctx: OpaquePointer?, tokens: [llama_token]) -> Int32 {
+    guard let ctx = ctx, !tokens.isEmpty else {
+        return 0
     }
-    // Convert the machine field (CChar array) to a Swift string
-    let machineMirror = Mirror(reflecting: sysinfo.machine)
-    var machineString = ""
-    for child in machineMirror.children {
-        if let value = child.value as? Int8, value != 0 {
-            machineString.append(Character(UnicodeScalar(UInt8(value))))
+    // get a single-sequence batch
+    var copy = tokens
+    let batch = llama_batch_get_one(&copy, Int32(tokens.count))
+    let rc = llama_decode(ctx, batch)
+    return rc
+}
+
+/// Bridging for kv_cache_seq_rm
+public func spm_llama_kv_cache_seq_rm(
+    ctx: OpaquePointer?,
+    seqId: Int32,
+    p0: Int,
+    p1: Int
+) {
+    guard let ctx = ctx else { return }
+    let ok = llama_kv_cache_seq_rm(ctx,
+                                   seqId,
+                                   llama_pos(p0),
+                                   llama_pos(p1))
+    // we ignore the returned bool
+}
+
+/// Bridging for kv_cache_seq_add
+public func spm_llama_kv_cache_seq_add(
+    ctx: OpaquePointer?,
+    seqId: Int32,
+    p0: Int,
+    p1: Int,
+    delta: Int
+) {
+    guard let ctx = ctx else { return }
+    llama_kv_cache_seq_add(ctx,
+                           seqId,
+                           llama_pos(p0),
+                           llama_pos(p1),
+                           llama_pos(delta))
+}
+
+/// Bridging for kv_cache_seq_div
+public func spm_llama_kv_cache_seq_div(
+    ctx: OpaquePointer?,
+    p0: Int,
+    p1: Int,
+    divisor: Int
+) {
+    guard let ctx = ctx else { return }
+    llama_kv_cache_seq_div(ctx,
+                           0,
+                           llama_pos(p0),
+                           llama_pos(p1),
+                           Int32(divisor))
+}
+
+/// Bridging for saving session to file
+public func spm_llama_state_save_file(
+    ctx: OpaquePointer?,
+    path: String,
+    tokens: [llama_token]
+) {
+    guard let ctx = ctx else { return }
+    let cPath = strdup(path)
+    defer { free(cPath) }
+    _ = llama_state_save_file(ctx, cPath, tokens, tokens.count)
+}
+
+/// Return whether a token is an end-of-generation token
+public func spm_llama_vocab_is_eog(
+    vocab: OpaquePointer?,
+    token: llama_token
+) -> Bool {
+    guard let v = vocab else { return false }
+    return llama_vocab_is_eog(v, token)
+}
+
+/// Similar to `common_sampler_prev_str(...)` in C++.
+///  - Retrieves up to `n` tokens from sampler->prev
+///  - Iterates them in reverse, converting each token to text
+///  - Returns the concatenated string
+/// We do **not** call `spm_llama_token_to_piece(...)`; we call llama_token_to_piece() directly instead.
+public func spm_llama_sampling_last_tokens(
+    ctxSampling: SpmSamplerContext?,
+    ctx: OpaquePointer?, // needed to get model => vocab
+    n: Int = 32
+) -> String {
+    guard let ctxSampling = ctxSampling, n > 0, let ctxMain = ctx else {
+        return ""
+    }
+
+    // get the model + vocab
+    guard let model = llama_get_model(ctxMain) else {
+        return ""
+    }
+    guard let vocab = llama_model_get_vocab(model) else {
+        return ""
+    }
+
+    // how many tokens do we actually have
+    let totalTokens = ctxSampling.prevTokens.count
+    if totalTokens == 0 {
+        return ""
+    }
+
+    // up to `n`, but not more
+    let got = min(n, totalTokens)
+
+    var result = ""
+    result.reserveCapacity(got * 8)  // optional guess
+
+    // spmSamplerContext.prevTokens[0] is newest, [1] older, etc. if we used insert(0).
+    // So the "last n tokens" in forward order are indices [got-1 ... 0].
+    // Then to replicate the C++ snippet which does reverse iteration, we do:
+    //
+    // In the C++ code:
+    //   for (int i = n - 1; i >= 0; i--) { result += token_to_piece(..., prev.rat(i)); }
+    //
+    // Here, we have them in Swift array with newest at index 0,
+    // so the last n tokens in forward order are indices [got-1 ... 0].
+    // We want them reversed => we do i in [0 ..< got], reversed:
+    for i in 0 ..< got {
+        let token = ctxSampling.prevTokens[i]
+        let piece = convertTokenToPieceRaw(vocab: vocab, token: token, special: false)
+        result += piece
+    }
+
+    return result
+}
+
+/// A small helper that calls llama_token_to_piece(...) directly (twice if needed),
+/// mirroring the approach from your C++ `common_token_to_piece` function.
+private func convertTokenToPieceRaw(
+    vocab: OpaquePointer?,
+    token: llama_token,
+    special: Bool
+) -> String {
+    // Start with a modest capacity
+    var capacity = 32
+
+    while true {
+        var buffer = [CChar](repeating: 0, count: capacity)
+
+        let nChars = llama_token_to_piece(vocab, token, &buffer, Int32(capacity), 0, special)
+
+        if nChars < 0 {
+            // The function wants a bigger buffer => set capacity to -nChars and retry
+            capacity = -Int(nChars)
+            continue
+        } else {
+            // success: nChars >= 0
+            // convert the buffer up to nChars
+            return buffer.withUnsafeBufferPointer { ptr in
+                // ptr is guaranteed to have at least nChars+1 bytes (with the trailing '\0')
+                return String(cString: ptr.baseAddress!)
+            }
         }
     }
-    return machineString
+}
+
+/// Convert a token to its corresponding piece of text.
+/// Similar to common_token_to_piece in the C++ code.
+///
+/// We replicate the logic:
+///  - Call llama_token_to_piece(...) with a small buffer
+///  - If the returned value is negative, re-allocate a bigger buffer of -nChars
+///  - Then call again until success
+///  - Return the resulting string
+public func spm_llama_token_to_piece(
+    model: OpaquePointer?,
+    vocab: OpaquePointer?,
+    token: llama_token,
+    special: Bool
+) -> String {
+    // Start with a small buffer capacity
+    var capacity = 32
+
+    while true {
+        // Allocate a buffer of 'capacity' chars
+        var buffer = [CChar](repeating: 0, count: capacity)
+
+        // Call the function
+        let nChars = llama_token_to_piece(vocab, token,
+            &buffer,          // pointer to our buffer
+            Int32(capacity),  // length
+            0,                // lstrip
+            special
+        )
+
+        if nChars < 0 {
+            // The function wants a bigger buffer of size -nChars
+            capacity = -Int(nChars)
+            continue
+        } else {
+            // nChars >= 0 => we succeeded
+            // The returned string length is nChars, but
+            // also there's a null terminator in the buffer.
+            // We can safely do this:
+            //   1) ensure the buffer is truncated or sized properly
+            //   2) create a Swift string from it
+            //   3) return
+            return buffer.withUnsafeBufferPointer { ptr in
+                String(cString: ptr.baseAddress!)
+            }
+        }
+    }
 }

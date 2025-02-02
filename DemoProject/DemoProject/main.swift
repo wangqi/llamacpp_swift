@@ -11,8 +11,9 @@ import Combine
 import Jinja
 
 // Initialize AI with model path
-//let modelPath = "/Users/wangqi/disk/projects/ai/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
-let modelPath = "/Users/wangqi/disk/projects/ai/models/Dolphin3.0-Qwen2.5-3b-Q4_K_M.gguf"
+let modelPath = "/Users/wangqi/disk/projects/ai/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf"
+//let modelPath = "/Users/wangqi/disk/projects/ai/models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
+//let modelPath = "/Users/wangqi/disk/projects/ai/models/Dolphin3.0-Qwen2.5-3b-Q4_K_M.gguf"
 let ai = AI(_modelPath: modelPath, _chatName: "chat")
 print("Load model: \(modelPath)")
 

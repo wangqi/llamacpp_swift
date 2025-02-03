@@ -49,7 +49,8 @@ let package = Package(
         // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master"),
         .package(url: "https://github.com/wangqi/Jinja", branch: "main"),
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0")
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
     ],
     targets: [
         .target(
@@ -76,6 +77,7 @@ let package = Package(
                 "llamacpp_swift_cpp",
                 .product(name: "llama", package: "llama.cpp"),
                 .product(name: "Jinja", package: "Jinja"),
+                .product(name: "Logging", package: "swift-log"),
               ],
               path: "Sources/swift"
         )

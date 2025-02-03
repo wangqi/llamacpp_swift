@@ -490,7 +490,7 @@ public struct ModelAndContextParams {
     public var skip_tokens: [Int32] = []
     public var skip_tokens_str: String = ""
 
-    public var promptFormat: ModelPromptStyle = .None
+    public var promptFormat: ModelPromptStyle = .Default
     public var custom_prompt_format = ""
     public var system_prompt = ""
     
@@ -631,6 +631,7 @@ public enum ModelError: Error {
 
 public enum ModelPromptStyle {
     case None
+    case Default
     case Custom
 }
 

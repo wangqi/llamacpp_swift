@@ -23,7 +23,7 @@ var params: ModelAndContextParams = .default
 //params.custom_prompt_format = """
 //<|User|>{prompt}<|Assistant|>
 //"""
-params.promptFormat = .None
+params.promptFormat = .Default
 params.custom_prompt_format = "{prompt}"
 params.use_metal = true
 params.logitsAll = true

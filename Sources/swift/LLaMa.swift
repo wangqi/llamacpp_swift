@@ -26,11 +26,11 @@ public class LLaMa: LLMBase {
     // Temporarily accumulates CChar arrays when partial UTF-8 decoding is happening
     public var temporary_invalid_cchars: [CChar] = []
 
-    // MARK: - init_sampling_param()
+    // MARK: - init
     
     /// Initialize sampling parameters for the new sampling context.
     /// This sets up the SpmSamplingParams struct from older sampleParams.
-    public func init_sampling_param() {
+    public func init_sampling_param(seed: Int = 0) {
         // Create a new SpmSamplingParams instance
         var spmParams = SpmSamplingParams()
 
@@ -58,7 +58,7 @@ public class LLaMa: LLMBase {
 
         // If you want a specific seed, set it here.
         // The old code was just passing 0, so:
-        spmParams.seed                = 0
+        spmParams.seed                = UInt32(seed)
 
         // Grammar path
         spmParams.grammarPath         = self.contextParams.grammar_path ?? ""
@@ -67,7 +67,57 @@ public class LLaMa: LLMBase {
         self.samplingContext = init_sampling(model: model, params: spmParams)
     }
     
-    // MARK: - llm_load_model()
+    // MARK: - deinit
+    
+    /**
+     Frees the batch, context, and model. destroy_clip is also called, but llama_backend_free
+     is commented out (not used).
+     */
+    public override func destroy_objects() {
+        print("destroy LLaMa")
+        
+        // Freed if not nil
+        if batch != nil {
+            llama_batch_free(batch!)
+        }
+        if context != nil {
+            llama_free(context)
+        }
+        if model != nil {
+            llama_free_model(model)
+        }
+        if let samplingContext = samplingContext, let sampler = samplingContext.sampler {
+            llama_sampler_free(samplingContext.sampler)
+        }
+        
+        // If you have a separate clip model, ensure that is freed too
+        self.destroy_clip()
+        
+        // llama_backend_free() is commented out in your snippet, so the entire backend might remain
+        // if you need to completely shut down the backend, consider calling it
+        llama_backend_free()
+    }
+    
+    // MARK: - destroy_clip()
+    
+    /**
+     Destroys clip-related allocations. Currently empty placeholder.
+     */
+    public func destroy_clip() {
+        // Not implemented in the snippet
+    }
+    
+    // MARK: - deinit
+    
+    deinit {
+        // Saves the state upon destruction if needed
+        self.save_state()
+        print("deinit LLaMa")
+        self.destroy_objects()
+        print("LLaMa deinited")
+    }
+    
+    // MARK: - load
     
     /**
      Loads the model using llama_load_model_from_file and sets up the context.
@@ -171,7 +221,10 @@ public class LLaMa: LLMBase {
         
         // Create a new batch
         self.batch = llama_batch_init(sampleParams.n_batch, 0, 1)
-        self.batch?.logits[Int(sampleParams.n_batch) - 1] = 1
+        if let batch = self.batch {
+            // Optionally set the last logits field to 1 (true) for the first set
+            batch.logits[Int(sampleParams.n_batch) - 1] = 1
+        }
         
         // Get model's chat template
         let modelChatTemplate = self.load_chat_template() ?? """
@@ -197,8 +250,6 @@ public class LLaMa: LLMBase {
         return true
     }
     
-    // MARK: - load_chat_template()
-    
     /**
      Loads a default chat template from model metadata, if available.
      
@@ -208,29 +259,6 @@ public class LLaMa: LLMBase {
     public override func load_chat_template(name: String? = nil) -> String? {
         return spm_llama_model_chat_template(model: self.model, name: name)
     }
-    
-    // MARK: - llm_sample()
-    
-    /**
-     Samples the next token from the model using spm_llama_sampling.
-     
-     - Returns: The sampled token as a ModelToken.
-     */
-    public override func llm_sample() -> ModelToken {
-        // spm_llama_sampling_sample picks a token
-        let id = spm_llama_sampling_sample(ctxSampling: self.samplingContext,
-                                           ctxMain: self.context,
-                                           idx: -1,
-                                           grammarFirst: false)
-        // Then accept that token so grammar or rep-penalty states are updated
-        spm_llama_sampling_accept(ctxSampling: self.samplingContext,
-                                  ctxMain: self.context,
-                                  token: id,
-                                  applyGrammar: true)
-        return id
-    }
-    
-    // MARK: - load_state()
     
     /**
      Attempts to load state from a file if `save_load_state` is true and a path is given.
@@ -262,7 +290,7 @@ public class LLaMa: LLMBase {
         }
     }
     
-    // MARK: - delete_state()
+    // MARK: - state management
     
     /**
      Deletes the serialized state file if `save_load_state` is true and the file exists.
@@ -282,8 +310,6 @@ public class LLaMa: LLMBase {
             print("No state file found to delete.")
         }
     }
-    
-    // MARK: - save_state()
     
     /**
      Appends the current nPast to outputRepeatTokens, then calls llama_state_save_file
@@ -316,56 +342,6 @@ public class LLaMa: LLMBase {
         LLaMa_obj = Unmanaged<LLaMa>
             .fromOpaque(Unmanaged.passRetained(self).toOpaque())
             .takeRetainedValue()
-    }
-    
-    // MARK: - destroy_objects()
-    
-    /**
-     Frees the batch, context, and model. destroy_clip is also called, but llama_backend_free
-     is commented out (not used).
-     */
-    public override func destroy_objects() {
-        print("destroy LLaMa")
-        
-        // Freed if not nil
-        if batch != nil {
-            llama_batch_free(batch!)
-        }
-        if context != nil {
-            llama_free(context)
-        }
-        if model != nil {
-            llama_free_model(model)
-        }
-        if let samplingContext = samplingContext, let sampler = samplingContext.sampler {
-            llama_sampler_free(samplingContext.sampler)
-        }
-        
-        // If you have a separate clip model, ensure that is freed too
-        self.destroy_clip()
-        
-        // llama_backend_free() is commented out in your snippet, so the entire backend might remain
-        // if you need to completely shut down the backend, consider calling it
-        llama_backend_free()
-    }
-    
-    // MARK: - destroy_clip()
-    
-    /**
-     Destroys clip-related allocations. Currently empty placeholder.
-     */
-    public func destroy_clip() {
-        // Not implemented in the snippet
-    }
-    
-    // MARK: - deinit
-    
-    deinit {
-        // Saves the state upon destruction if needed
-        self.save_state()
-        print("deinit LLaMa")
-        self.destroy_objects()
-        print("LLaMa deinited")
     }
     
     // MARK: - Low-Level Overrides
@@ -444,27 +420,74 @@ public class LLaMa: LLMBase {
 
     }
 
-    // MARK: - llm_decode()
+    // MARK: - decode
+
+    /**
+     Samples the next token from the model using spm_llama_sampling.
+     
+     - Returns: The sampled token as a ModelToken.
+     */
+    public override func llm_sample() -> ModelToken {
+        // spm_llama_sampling_sample picks a token
+        let id = spm_llama_sampling_sample(ctxSampling: self.samplingContext, ctxMain: self.context, idx: -1, grammarFirst: false)
+        // Then accept that token so grammar or rep-penalty states are updated
+        spm_llama_sampling_accept(ctxSampling: self.samplingContext, ctxMain: self.context, token: id, applyGrammar: true)
+        return id
+    }
     
     /**
-     Evaluates tokens using llama_decode. In official llama.cpp, the standard function is `llama_eval()`,
-     but your bridging library might name it `llama_decode()`. Double-check that you are calling
-     the correct function for forward evaluation.
-
-     - Parameter inputBatch: The tokens to be evaluated (decoded).
-     - Returns: True on success, false otherwise.
-     - Throws: Rethrows any bridging errors encountered.
+     We reuse the **global `batch`** to decode the tokens in `inputBatch`.
+     This approach can handle both:
+       - Single-token decode calls (e.g., streaming).
+       - Multi-token decode calls (e.g., an entire prompt).
+     
+     Steps:
+       1. Ensure `batch` is allocated.
+       2. Clear it with `llama_batch_clear(&batch)`.
+       3. Add each token from `inputBatch` to the global batch, setting
+          the positions appropriately. If you only do single-token decode,
+          the position can be `nPast`. If multi-token decode, do `nPast + idx`.
+       4. Call `llama_decode(context, batch)`.
+       5. Return success/failure.
+     
+     - Parameter inputBatch: The tokens to evaluate (could be 1 or many).
+     - Returns: `true` if decode is successful, `false` otherwise.
+     - Throws: You can choose to throw an error if needed, or just return false.
      */
     public override func llm_decode(inputBatch: inout [ModelToken]) throws -> Bool {
-        if llama_decode(context,llama_batch_get_one(&inputBatch, Int32(inputBatch.count))) != 0 {
+        // Ensure the global batch is allocated
+        guard self.batch != nil else {
+            print("No global batch allocated! Cannot decode.")
+            return false
+        }
+        
+        // 1) Clear the global batch (inout reference to self.batch!)
+        llama_batch_clear(&self.batch!)
+        
+        // 2) Add each token from inputBatch into the global batch
+        //    Mark the last token's logits = true (1) if you want to compute logits for it.
+        for (idx, token) in inputBatch.enumerated() {
+            let isLast = (idx == inputBatch.count - 1)
+            let position = self.nPast + Int32(idx)  // or just Int32(idx) if you manage nPast elsewhere
+            llama_batch_add(&self.batch!,
+                            token,
+                            position,
+                            [0],     // seq_ids array, often [0] if single sequence
+                            isLast)  // true if we want logits for the last token
+        }
+        
+        // 3) Perform the decode using llama_decode
+        if llama_decode(self.context, self.batch!) != 0 {
             print("failed to evaluate llama!")
             return false
         }
+        
+        // Optional: If you want to automatically update nPast here, uncomment:
+        // self.nPast += Int32(inputBatch.count)
+        
         return true
     }
     
-    // MARK: - ForgotLastNTokens(_ N:)
-
     /**
      This function claims to "forget" the last N tokens, but currently ignores `N` and
      calls `llama_kv_cache_seq_rm(self.context, -1, 0, -1)`, which likely removes
@@ -479,8 +502,6 @@ public class LLaMa: LLMBase {
         llama_kv_cache_seq_rm(self.context, -1, N, -1)
     }
 
-    // MARK: - KVShift()
-    
     /**
      Shifts the KV cache by discarding half of nPast starting after repeat_last_n.
      Then sets nPast = nPast - n_discard + 1.
@@ -503,7 +524,7 @@ public class LLaMa: LLMBase {
         // print("Context Limit!")
     }
     
-    // MARK: - LLaMa Batch Helpers
+    // MARK: - LLaMa Batch
     
     /**
      Clears the batch token count (n_tokens = 0).
@@ -591,8 +612,6 @@ public class LLaMa: LLMBase {
         }
     }
     
-    // MARK: - LLMTokenToStr(outputToken:)
-    
     /**
      Converts a token to its string representation. Accumulates partial UTF-8 bytes
      until a valid string can be formed. If the partial data cannot form a valid UTF-8
@@ -611,17 +630,22 @@ public class LLaMa: LLMBase {
             // If the entire set is now valid
             temporary_invalid_cchars.removeAll()
             new_token_str = string
-        } else if (0 ..< temporary_invalid_cchars.count).contains(where: { idx in
-            // Attempt partial suffix parse
-            idx != 0 && String(validatingUTF8: Array(temporary_invalid_cchars.suffix(idx)) + [0]) != nil
-        }) {
-            // In this scenario, a suffix of the array is valid. The code as written forcibly uses
-            // the entire array again. This logic is fairly tricky, so ensure it does what you want.
-            let string = String(cString: temporary_invalid_cchars + [0])
-            temporary_invalid_cchars.removeAll()
-            new_token_str = string
         } else {
-            new_token_str = ""
+            // Attempt to see if partial suffix is valid
+            var suffixString: String? = nil
+            for idx in 1..<temporary_invalid_cchars.count {
+                let subSlice = temporary_invalid_cchars.suffix(idx)
+                if let possible = String(validatingUTF8: Array(subSlice) + [0]) {
+                    suffixString = possible
+                    break
+                }
+            }
+            if let partial = suffixString {
+                temporary_invalid_cchars.removeAll()
+                new_token_str = partial
+            } else {
+                new_token_str = ""
+            }
         }
         return new_token_str
     }
@@ -645,44 +669,47 @@ public class LLaMa: LLMBase {
                                      chatTemplate: String? = nil,
                                      systemPrompt: String? = nil,
                                      add_bos: Bool? = nil,
-                                     parse_special: Bool? = nil) -> [ModelToken]
+                                     parse_special: Bool? = nil,
+                                     use_template: Bool = true) -> [ModelToken]
     {
         let final_add_bos       = add_bos ?? self.contextParams.add_bos_token
         let final_parse_special = parse_special ?? self.contextParams.parse_special_tokens
         
         print("LLaMa tokenize: input: \"\(input)\", add_bos: \(final_add_bos), parse_special: \(final_parse_special)")
         
-        let systemQuery = systemPrompt ?? ""
-        let userQuery   = input
-        
-        // Build the messages array for chat template
-        let messages: [[String: Any]] = [
-            ["role": "system", "content": systemQuery],
-            ["role": "user", "content": userQuery],
-            /*
-            [
-                "role": "assistant",
-                "content": NSNull(),
-                "tool_calls": []
-            ]
-             */
-        ]
-        
         var query = input
-        if let template = self.chatTemplate {
-            // Use ChatTemplate to format the messages
-            query = template.apply(
-                messages: messages,
-                tools: [:],
-                addGenerationPrompt: true,
-                extraContext: final_add_bos ? ["bos_token": "<s>"] : [:]
-            )
-        } else {
-            print("LLaMa.chatTemplate is nil. Using input directly as query.")
-        }
-        
-        if query.count == 0 {
-            return []
+        if use_template {
+            let systemQuery = systemPrompt ?? ""
+            let userQuery   = input
+            
+            // Build the messages array for chat template
+            let messages: [[String: Any]] = [
+                ["role": "system", "content": systemQuery],
+                ["role": "user", "content": userQuery],
+                /*
+                [
+                    "role": "assistant",
+                    "content": NSNull(),
+                    "tool_calls": []
+                ]
+                 */
+            ]
+            
+            if let template = self.chatTemplate {
+                // Use ChatTemplate to format the messages
+                query = template.apply(
+                    messages: messages,
+                    tools: [:],
+                    addGenerationPrompt: true,
+                    extraContext: final_add_bos ? ["bos_token": "<s>"] : [:]
+                )
+            } else {
+                print("LLaMa.chatTemplate is nil. Using input directly as query.")
+            }
+            
+            if query.count == 0 {
+                return []
+            }
         }
         print("Final query: \(query)")
         
@@ -724,7 +751,7 @@ public class LLaMa: LLMBase {
             // If the model has a separate decoder start token, fetch it. If -1, fallback to BOS.
             var decoder_start_token_id = llama_model_decoder_start_token(self.model)
             if decoder_start_token_id == -1 {
-                decoder_start_token_id = llama_vocab_bos(self.vocab)
+                decoder_start_token_id = self.llm_bos_token ?? llama_vocab_bos(self.vocab)
             }
             // Reset embeddings to [decoder_start_token]
             embeddings = [decoder_start_token_id]

@@ -38,7 +38,10 @@ public class LLMBase {
     public var modelPath: String
     public var outputRepeatTokens: [ModelToken] = []
     
+    /// Holds the entire "past" token sequences (not always used).
     var past: [[ModelToken]] = []
+    
+    /// Number of tokens that have been fed (prompt + generated).
     public var nPast: Int32 = 0
     
     var llm_bos_token: ModelToken?
@@ -190,6 +193,11 @@ public class LLMBase {
     
     // MARK: - Evaluation
     
+    /**
+     - Note: This is the function that calls a bridging `llama_decode` or similar
+       to evaluate a batch of tokens. By default, it just returns false
+       unless you override it in a subclass (like LLaMa).
+     */
     public func llm_decode(inputBatch: inout [ModelToken]) throws -> Bool {
         return false
     }
@@ -198,6 +206,9 @@ public class LLMBase {
         return true
     }
     
+    /**
+     Samples the next token from the model. If not overridden, returns 0.
+     */
     public func llm_sample() -> ModelToken {
         return 0
     }
@@ -217,12 +228,19 @@ public class LLMBase {
         }
     }
     
+    /**
+     Converts a single token to a string (partial or complete).
+     - Overridden in a subclass to implement partial UTF-8 logic.
+     */
     public func LLMTokenToStr(outputToken: Int32) -> String? {
         return nil
     }
     
     // MARK: - System Prompt & Image Evaluation
     
+    /**
+     Evaluates a single pass of the system prompt tokens if present.
+     */
     public func _eval_system_prompt(system_prompt: String? = nil) throws {
         if let sp = system_prompt, !sp.isEmpty {
             var systemPromptTokens: [ModelToken] = try TokenizePrompt(sp, .None)
@@ -237,6 +255,9 @@ public class LLMBase {
         }
     }
 
+    /**
+     Evaluates an image embed if present (CLIP or other).
+     */
     public func _eval_img(img_path: String? = nil) throws {
         if let path = img_path {
             do {
@@ -286,6 +307,7 @@ public class LLMBase {
             inputBatch.append(contentsOf: inputTokens[0..<evalCount])
             inputTokens.removeFirst(evalCount)
 
+            // If adding these tokens would exceed the context limit, do a KVShift
             if self.nPast + Int32(inputBatch.count) >= self.contextParams.context {
                 try self.KVShift()
                 // Optionally notify the callback about the context limit
@@ -371,14 +393,7 @@ public class LLMBase {
     // MARK: - Prompt Tokenization
     
     public func TokenizePrompt(_ input: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
-        switch style {
-        case .None:
-            print("LLMBase.TokenizePrompt: use model default Jinja2 Chat Template")
-            return LLMTokenize(input)
-        case .Custom:
-            print("LLMBase.TokenizePrompt: use custom Jinja2 Chat Template")
-            return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format)
-        }
+        return try TokenizePromptWithSystem(input, "", style)
     }
 
     public func TokenizePromptWithSystem(_ input: String,
@@ -386,6 +401,9 @@ public class LLMBase {
                                          _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
+            print("LLMBase.TokenizePromptWithSystem: use no template at all")
+            return LLMTokenize(input, systemPrompt: systemPrompt, use_template: false)
+        case .Default:
             print("LLMBase.TokenizePromptWithSystem: use model default Jinja2 Chat Template")
             return LLMTokenize(input, systemPrompt: systemPrompt)
         case .Custom:
@@ -407,13 +425,12 @@ public class LLMBase {
         }
     }
     
-    public func LLMTokenize(
-        _ input: String,
-        chatTemplate: String? = nil,
-        systemPrompt: String? = nil,
-        add_bos: Bool? = nil,
-        parse_special: Bool? = nil
-    ) -> [ModelToken] {
+    /**
+     A base method to tokenize user inputs with optional system prompts and custom chat templates.
+     Subclasses (like LLaMa) often override with specialized logic.
+     */
+    public func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
+                            add_bos: Bool? = nil, parse_special: Bool? = nil, use_template: Bool = true) -> [ModelToken] {
         return []
     }
     
@@ -431,6 +448,21 @@ public class LLMBase {
 
     // MARK: - Closure-based streaming
 
+
+    /**
+     A streaming generation function that uses single-token decode batches (similar to the reference code’s `infer`).
+     
+     **Key changes from your original approach**:
+     1. We initialize the prompt (system prompt, image embeddings).
+     2. We "batch-evaluate" the input tokens via `EvalInputTokensBatched`.
+     3. **Then** we do a loop:
+        - `llm_sample()` -> single token
+        - Optionally skip if in `skip_tokens`.
+        - Convert token to partial UTF-8 string.
+        - Accumulate partial results -> call `onPartialResult` once we have a chunk.
+        - Build a single-token `llama_batch` (if your subclass supports it) -> decode -> `nPast++`.
+     This matches the "sample -> decode -> sample -> decode" pattern from the reference code.
+     */
     public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil,
                             onPartialResult: @escaping (ChatStreamResult) -> Void,
                             shouldContinue: ((ChatStreamResult) -> Bool)? = nil,
@@ -441,13 +473,16 @@ public class LLMBase {
             let startTime = Date()
             let contextLength = Int32(self.contextParams.context)
             
+            // (1) Evaluate system prompt once, if any
             if self.nPast == 0 {
                 try self._eval_system_prompt(system_prompt: system_prompt)
             }
+            // (2) Evaluate image embeddings if any
             try self._eval_img(img_path: img_path)
             
             print("Past token count: \(self.nPast)/\(contextLength) (\(self.past.count))")
             
+            // (3) Tokenize the user input (with system prompt if needed)
             var inputTokens = try self.TokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
             if inputTokens.isEmpty && (img_path ?? "").isEmpty {
                 completion("", 0, ModelError.emptyInput)
@@ -461,40 +496,51 @@ public class LLMBase {
                 throw ModelError.inputTooLong
             }
             
+            // (4) Evaluate all prompt tokens in batched manner
             try self.EvalInputTokensBatched(inputTokens: &inputTokens) { _, _ in true }
             
+            // Prepare for sampling loop
             self.outputRepeatTokens = []
             var outputCache = [String]()
             var fullOutput = [String]()
             var completion_loop = true
             
+            // We may call infoCallback if you want to pass debug info at any point
+            infoCallback?("promptTokensUsed", inputTokensCount)
+            
+            // (5) Repeatedly sample & decode single tokens until we hit an end condition
             while completion_loop {
                 var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
                     outputToken = self.llm_sample()
                 }
                 
+                // Keep track of used tokens for repetition penalty, etc.
                 self.outputRepeatTokens.append(outputToken)
                 if self.outputRepeatTokens.count > self.sampleParams.repeat_last_n {
                     self.outputRepeatTokens.removeFirst()
                 }
                 
+                // If token is EOG/EOS, break
                 if self.llm_token_is_eog(token: outputToken) {
                     completion_loop = false
                     print("[EOG]")
                     break
                 }
                 
+                // Potentially skip the token
                 var skipCallback = false
                 if !self.CheckSkipTokens(outputToken) {
                     print("Skip token: \(outputToken)")
                     skipCallback = true
                 }
                 
+                // Convert token to partial string
                 if !skipCallback, let str = self.LLMTokenToStr(outputToken: outputToken) {
                     outputCache.append(str)
                     fullOutput.append(str)
                     
+                    // If we have enough data, flush partial
                     if outputCache.count >= self.contextParams.predict_cache_length {
                         let chunk = outputCache.joined()
                         outputCache.removeAll()
@@ -502,6 +548,7 @@ public class LLMBase {
                     }
                 }
                 
+                // Check if we've reached user-requested max tokens
                 let outputCount = fullOutput.count
                 if self.contextParams.n_predict != 0 && outputCount > self.contextParams.n_predict {
                     print(" * n_predict reached *")
@@ -509,8 +556,10 @@ public class LLMBase {
                     break
                 }
                 
+                // (5a) If still going, handle context limit
                 if completion_loop {
                     if self.nPast >= self.contextParams.context - 2 {
+                        // Attempt context shifting if feasible
                         try self.KVShift()
                         onPartialResult(.success(ModelResult(choices: LLMBase.CONTEXT_LIMIT_MARKER, time: 0)))
                         
@@ -522,10 +571,13 @@ public class LLMBase {
                         }
                     }
                     
+                    // (5b) Single-token decode
+                    // Instead of building an array [outputToken], we can use the batch approach
+                    // if the subclass supports it. But here's the simpler fallback:
+                    var singleTokenBatch = [outputToken]
                     var evalResult: Bool? = nil
                     try ExceptionCather.catchException {
-                        var inputBatch = [outputToken]
-                        evalResult = try? self.llm_decode(inputBatch: &inputBatch)
+                        evalResult = try? self.llm_decode(inputBatch: &singleTokenBatch)
                     }
                     if evalResult == false {
                         throw ModelError.failedToEval
@@ -534,12 +586,14 @@ public class LLMBase {
                 }
             }
             
+            // If anything remains in outputCache, flush it
             if !outputCache.isEmpty {
                 let chunk = outputCache.joined()
                 fullOutput.append(chunk)
                 onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
             }
             
+            // (6) Done
             let endTime = Date()
             let processingTime = endTime.timeIntervalSince(startTime) * 1000
             

@@ -44,6 +44,8 @@ public class LLMBase {
     var llm_bos_token: ModelToken?
     var llm_eos_token: ModelToken?
     var llm_nl_token: ModelToken?
+    var llm_bos_token_str: String?
+    var llm_eos_token_str: String?
     
     // MARK: - Initialization
     
@@ -429,16 +431,12 @@ public class LLMBase {
 
     // MARK: - Closure-based streaming
 
-    public func chatsStream(
-        input: String,
-        system_prompt: String? = nil,
-        img_path: String? = nil,
-        onPartialResult: @escaping (ChatStreamResult) -> Void,
-        shouldContinue: ((ChatStreamResult) -> Bool)? = nil,
-        infoCallback: ((String, Any) -> Void)? = nil,
-        stopWhenContextLimitReach: Bool = true,
-        completion: @escaping (String, Double, Error?) -> Void
-    ) {
+    public func chatsStream(input: String, system_prompt: String? = nil, img_path: String? = nil,
+                            onPartialResult: @escaping (ChatStreamResult) -> Void,
+                            shouldContinue: ((ChatStreamResult) -> Bool)? = nil,
+                            infoCallback: ((String, Any) -> Void)? = nil,
+                            stopWhenContextLimitReach: Bool = true,
+                            completion: @escaping (String, Double, Error?) -> Void) {
         do {
             let startTime = Date()
             let contextLength = Int32(self.contextParams.context)
@@ -450,9 +448,7 @@ public class LLMBase {
             
             print("Past token count: \(self.nPast)/\(contextLength) (\(self.past.count))")
             
-            var inputTokens = try self.TokenizePromptWithSystem(input,
-                                                                system_prompt ?? "",
-                                                                self.contextParams.promptFormat)
+            var inputTokens = try self.TokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
             if inputTokens.isEmpty && (img_path ?? "").isEmpty {
                 completion("", 0, ModelError.emptyInput)
                 return
@@ -597,11 +593,7 @@ public class LLMBase {
     ) -> AsyncThrowingStream<ModelResult, Error> {
         
         return AsyncThrowingStream { continuation in
-            self.chatsStream(
-                input: input,
-                system_prompt: system_prompt,
-                img_path: img_path
-            ) { partialResult in
+            self.chatsStream(input: input, system_prompt: system_prompt, img_path: img_path) { partialResult in
                 switch partialResult {
                 case .success(let modelResult):
                     continuation.yield(modelResult)

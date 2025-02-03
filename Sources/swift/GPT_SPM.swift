@@ -52,7 +52,7 @@ public struct SpmSamplingParams {
 /// The sampler handle we return from `init_sampling`.
 /// We store the chain pointer as `UnsafeMutablePointer<llama_sampler>`.
 public final class SpmSamplerContext {
-    public var chain: UnsafeMutablePointer<llama_sampler>?
+    public var sampler: UnsafeMutablePointer<llama_sampler>?
     public var grammarSampler: UnsafeMutablePointer<llama_sampler>?
     // Store the previously accepted tokens in Swift
     // e.g. newest token at index 0, older tokens at higher indices
@@ -63,75 +63,80 @@ public final class SpmSamplerContext {
 
 /// Replacement for the original C++ `init_sampling(...)`.
 /// Instead of calling `common_sampler_init(...)`, we manually build a llama sampler chain.
-public func init_sampling(
-    model: OpaquePointer?,
-    params: SpmSamplingParams
-) -> SpmSamplerContext {
+public func init_sampling(model: OpaquePointer?, params: SpmSamplingParams) -> SpmSamplerContext {
     // Prepare the chain
-    var chainParams = llama_sampler_chain_default_params()
-    chainParams.no_perf = true
+    var sparams = llama_sampler_chain_default_params()
+    sparams.no_perf = true
 
-    guard let chainPtr = llama_sampler_chain_init(chainParams) else {
+    guard let sampling = llama_sampler_chain_init(sparams) else {
         // If somehow chain creation fails, return empty
+        print("GPT_SPM.init_sampling() WARNING: Failed to initialize sampler chain")
         return SpmSamplerContext()
     }
 
     // We store it in SpmSamplerContext
-    let ctx = SpmSamplerContext()
-    ctx.chain = chainPtr
+    let samplerContext = SpmSamplerContext()
+    samplerContext.sampler = sampling
 
     // Build up samplers in the chain:
 
     // 1) Repetition/presence penalties
     if params.penaltyLastN != 0
         && (params.penaltyRepeat != 1.0 || params.penaltyFreq != 0.0 || params.penaltyPresent != 0.0) {
+        print("GPT_SPM.init_sampling(). penaltyLastN: \(params.penaltyLastN), penaltyRepeat: \(params.penaltyRepeat), penaltyFreq: \(params.penaltyFreq), penaltyPresent: \(params.penaltyPresent)")
         if let sampler = llama_sampler_init_penalties(
             params.penaltyLastN,
             params.penaltyRepeat,
             params.penaltyFreq,
             params.penaltyPresent
         ) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 2) Top-k
     if params.topK > 0 {
+        print("GPT_SPM.init_sampling(). topK: \(params.topK)")
         if let sampler = llama_sampler_init_top_k(params.topK) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 3) Typical
     if params.typicalP < 0.9999 {
+        print("GPT_SPM.init_sampling(). typicalP: \(params.typicalP)")
         if let sampler = llama_sampler_init_typical(params.typicalP, 1) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 4) Top-p
     if params.topP < 0.9999 {
+        print("GPT_SPM.init_sampling(). topP: \(params.topP)")
         if let sampler = llama_sampler_init_top_p(params.topP, 1) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 5) Min-p
     if params.minP > 0 && params.minP < 0.9999 {
+        print("GPT_SPM.init_sampling(). minP: \(params.minP)")
         if let sampler = llama_sampler_init_min_p(params.minP, 1) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 6) Temperature
     if params.temp > 0 {
+        print("GPT_SPM.init_sampling(). temp: \(params.temp)")
         if let sampler = llama_sampler_init_temp(params.temp) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     } else {
+        print("GPT_SPM.init_sampling(). use 'greedy' sampler")
         // temp <= 0 => use "greedy" sampler
         if let sampler = llama_sampler_init_greedy() {
-            llama_sampler_chain_add(chainPtr, sampler)
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
@@ -145,7 +150,8 @@ public func init_sampling(
             params.mirostatEta,
             100 // 'm' argument
         ) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            print("GPT_SPM.init_sampling(). mirostat enabled")
+            llama_sampler_chain_add(sampling, sampler)
         }
     } else if params.mirostat == 2 {
         if let sampler = llama_sampler_init_mirostat_v2(
@@ -153,15 +159,16 @@ public func init_sampling(
             params.mirostatTau,
             params.mirostatEta
         ) {
-            llama_sampler_chain_add(chainPtr, sampler)
+            print("GPT_SPM.init_sampling(). mirostat v2 enabled")
+            llama_sampler_chain_add(sampling, sampler)
         }
     }
 
     // 8) Dist (random) as the final sampler
     if let finalSampler = llama_sampler_init_dist(params.seed) {
-        llama_sampler_chain_add(chainPtr, finalSampler)
+        llama_sampler_chain_add(sampling, finalSampler)
     }
-
+    
     // 9) Grammar
     // use spm_llama_load_grammar instead
     /*
@@ -173,12 +180,13 @@ public func init_sampling(
     }
     */
 
-    return ctx
+    return samplerContext
 }
 
 public func spm_llama_load_grammar(model: OpaquePointer?, ctx: SpmSamplerContext, grammarPath: String) -> Bool {
+    print("GPT_SPM.spm_llama_load_grammar(). grammarPath: \(grammarPath)")
     let grammarSamplerPtr = llama_sampler_init_grammar(model, grammarPath, "root")
-    llama_sampler_chain_add(ctx.chain, grammarSamplerPtr)
+    llama_sampler_chain_add(ctx.sampler, grammarSamplerPtr)
     ctx.grammarSampler = grammarSamplerPtr
     if grammarSamplerPtr == nil {
         return true
@@ -218,7 +226,7 @@ public func spm_llama_model_chat_template(
 /// We assume that `ctxSampling` is a chain sampler from `init_sampling(...)`.
 public func spm_llama_sampling_sample(ctxSampling: SpmSamplerContext?, ctxMain: OpaquePointer?,
                                       idx: Int32 = -1, grammarFirst: Bool = false) -> llama_token {
-    guard let chain = ctxSampling?.chain, let cMain = ctxMain else {
+    guard let chain = ctxSampling?.sampler, let cMain = ctxMain else {
         return -1
     }
     // The built-in function to sample a token from the last decode output:
@@ -239,7 +247,7 @@ public func spm_llama_sampling_accept(
     token: llama_token,
     applyGrammar: Bool
 ) {
-    guard let chain = ctxSampling?.chain else {
+    guard let chain = ctxSampling?.sampler else {
         return
     }
     llama_sampler_accept(chain, token)

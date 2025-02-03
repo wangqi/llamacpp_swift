@@ -5,7 +5,6 @@
 
 import Foundation
 import llama
-import llamacpp_swift
 import llamacpp_swift_cpp
 import Jinja
 
@@ -18,7 +17,7 @@ public class LLaMa: LLMBase {
     // MARK: - Public Properties
     
     public var model: OpaquePointer?
-    public var ctx_sampling: SpmSamplerContext?
+    public var samplingContext: SpmSamplerContext?
     public var vocab: OpaquePointer?
     public var batch: llama_batch?
     public var hardware_arch: String = ""
@@ -65,7 +64,7 @@ public class LLaMa: LLMBase {
         spmParams.grammarPath         = self.contextParams.grammar_path ?? ""
 
         // Now call the updated function with the struct
-        self.ctx_sampling = init_sampling(model: model, params: spmParams)
+        self.samplingContext = init_sampling(model: model, params: spmParams)
     }
     
     // MARK: - llm_load_model()
@@ -88,10 +87,14 @@ public class LLaMa: LLMBase {
         // Setup context parameters
         context_params.n_ctx       = UInt32(contextParams.context)
         // context_params.seed     = UInt32(contextParams.seed) // commented out
+        let nThreads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
         context_params.n_threads   = contextParams.n_threads
+        context_params.n_threads_batch = context_params.n_threads
+        print("LLaMa.llm_load_model: n_threads: \(context_params.n_threads). Recommended: \(nThreads)")
         context_params.logits_all  = contextParams.logitsAll
         context_params.flash_attn  = contextParams.flash_attn
         // context_params.flash_attn = false
+
         
         // Setup model parameters
         model_params.vocab_only = contextParams.vocabOnly
@@ -139,6 +142,7 @@ public class LLaMa: LLMBase {
             self.vocab = llama_model_get_vocab(model) // self.model is the same pointer if not nil
         }
         if self.model == nil {
+            destroy_objects()
             return false
         }
 
@@ -147,9 +151,10 @@ public class LLaMa: LLMBase {
 
         // Attempt context creation
         try ExceptionCather.catchException {
-            self.context = llama_init_from_model(self.model, context_params)
+            self.context = llama_new_context_with_model(self.model, context_params)
         }
         if self.context == nil {
+            destroy_objects()
             return false
         }
         
@@ -166,24 +171,28 @@ public class LLaMa: LLMBase {
         
         // Create a new batch
         self.batch = llama_batch_init(sampleParams.n_batch, 0, 1)
+        self.batch?.logits[Int(sampleParams.n_batch) - 1] = 1
         
         // Get model's chat template
         let modelChatTemplate = self.load_chat_template() ?? """
 {% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}
 """
         
-        // Initialize chat template
-        self.chatTemplate = ChatTemplate(
-            source: modelChatTemplate,
-            bosToken: LLMTokenToStr(outputToken: llama_vocab_bos(self.vocab)) ?? "<s>",
-            eosToken: LLMTokenToStr(outputToken: llama_vocab_eos(self.vocab)) ?? "</s>"
-        )
-        
         //Cache bos & eos tokens
         llm_bos_token = llama_vocab_bos(self.vocab)
         llm_eos_token = llama_vocab_eos(self.vocab)
         llm_nl_token = llama_vocab_nl(self.vocab)
+        llm_bos_token_str = LLMTokenToStr(outputToken: llama_vocab_bos(self.vocab))
+        llm_eos_token_str = LLMTokenToStr(outputToken: llama_vocab_eos(self.vocab))
+
         print("LLaMa.llm_load_model llm_bos_token: \(llm_bos_token) llm_eos_token: \(llm_eos_token) llm_nl_token: \(llm_nl_token) ")
+
+        // Initialize chat template
+        self.chatTemplate = ChatTemplate(
+            source: modelChatTemplate,
+            bosToken: llm_bos_token_str ?? "<s>",
+            eosToken: llm_eos_token_str ?? "</s>"
+        )
         
         return true
     }
@@ -209,12 +218,12 @@ public class LLaMa: LLMBase {
      */
     public override func llm_sample() -> ModelToken {
         // spm_llama_sampling_sample picks a token
-        let id = spm_llama_sampling_sample(ctxSampling: self.ctx_sampling,
+        let id = spm_llama_sampling_sample(ctxSampling: self.samplingContext,
                                            ctxMain: self.context,
                                            idx: -1,
                                            grammarFirst: false)
         // Then accept that token so grammar or rep-penalty states are updated
-        spm_llama_sampling_accept(ctxSampling: self.ctx_sampling,
+        spm_llama_sampling_accept(ctxSampling: self.samplingContext,
                                   ctxMain: self.context,
                                   token: id,
                                   applyGrammar: true)
@@ -328,13 +337,16 @@ public class LLaMa: LLMBase {
         if model != nil {
             llama_free_model(model)
         }
+        if let samplingContext = samplingContext, let sampler = samplingContext.sampler {
+            llama_sampler_free(samplingContext.sampler)
+        }
         
         // If you have a separate clip model, ensure that is freed too
         self.destroy_clip()
         
         // llama_backend_free() is commented out in your snippet, so the entire backend might remain
         // if you need to completely shut down the backend, consider calling it
-        // llama_backend_free()
+        llama_backend_free()
     }
     
     // MARK: - destroy_clip()
@@ -377,7 +389,7 @@ public class LLaMa: LLMBase {
     public override func load_grammar(_ path: String) throws -> Void {
         do {
             try ExceptionCather.catchException {
-                if let ctx_sampling = self.ctx_sampling {
+                if let ctx_sampling = self.samplingContext {
                     spm_llama_load_grammar(model: self.model, ctx: ctx_sampling, grammarPath: path)
                 }
             }
@@ -385,6 +397,51 @@ public class LLaMa: LLMBase {
             print("load_grammar() error: \(error)")
             throw error
         }
+    }
+
+    func bench(pastTokenCount: Int32, maxTokenLength: Int32, nrSamples: Int32 = 1) -> BenchmarkResult? {
+        var pp_avg: Double = 0
+        var tg_avg: Double = 0
+        var pp_std: Double = 0
+        var tg_std: Double = 0
+        
+        if let batch = self.batch {
+            for _ in 0..<nrSamples {
+                let start = Date()
+                let _ = llama_decode(context, batch)
+                let end = Date()
+                let elapsed = end.timeIntervalSince(start) * 1000
+                pp_avg += elapsed
+                pp_std += elapsed * elapsed
+            }
+            // Similar token generation timing logic here
+            
+            pp_avg /= Double(nrSamples)
+            tg_avg /= Double(nrSamples)
+            
+            if nrSamples > 1 {
+                pp_std = sqrt(pp_std/Double(nrSamples-1) - pp_avg*pp_avg*Double(nrSamples)/Double(nrSamples-1))
+                tg_std = sqrt(tg_std/Double(nrSamples-1) - tg_avg*tg_avg*Double(nrSamples)/Double(nrSamples-1))
+            }
+            
+            let model_desc = model_info()
+            let model_size = String(format: "%.2f GiB", Double(llama_model_size(model))/1024/1024/1024)
+            let model_n_params = String(format: "%.2f B", Double(llama_model_n_params(model))/1e9)
+            
+            return BenchmarkResult(
+                promptProcessingTime: pp_avg,
+                tokenGenerationTime: tg_avg,
+                promptStdDev: pp_std,
+                tokenStdDev: tg_std,
+                modelDescription: model_desc,
+                modelSize: model_size,
+                parameterCount: model_n_params,
+                backend: "Metal"
+            )
+        }
+        
+        return nil
+
     }
 
     // MARK: - llm_decode()
@@ -434,17 +491,12 @@ public class LLaMa: LLMBase {
         let n_discard = self.nPast / 2
         
         // Removes tokens from repeat_last_n to repeat_last_n + n_discard
-        llama_kv_cache_seq_rm(context,
-                              0,
-                              self.sampleParams.repeat_last_n,
+        llama_kv_cache_seq_rm(context, 0, self.sampleParams.repeat_last_n,
                               self.sampleParams.repeat_last_n + n_discard)
         
-        // Adds them in with an offset of -n_discard
-        llama_kv_cache_seq_add(context,
-                               0,
+        llama_kv_cache_seq_add(context, 0,
                                self.sampleParams.repeat_last_n + n_discard,
-                               self.nPast,
-                               -n_discard)
+                               self.nPast, -n_discard)
         
         self.nPast -= n_discard
         self.nPast += 1
@@ -573,12 +625,6 @@ public class LLaMa: LLMBase {
         }
         return new_token_str
     }
-
-    /// Returns the "newline" token if your bridging library has it.
-    /// Not standard in upstream llama.cpp. Possibly a custom bridging function.
-    public override func llm_token_nl() -> ModelToken {
-        return llama_vocab_nl(self.vocab)
-    }
     
     // MARK: - LLMTokenize()
     
@@ -647,13 +693,8 @@ public class LLaMa: LLMBase {
         
         // llama_tokenize typically returns the number of tokens found (n).
         // The 6th parameter is whether we want to add the BOS token, the 7th is parse special tokens.
-        let n: Int32 = llama_tokenize(self.vocab,
-                                      query,
-                                      Int32(utf8_count),
-                                      &embeddings,
-                                      n_tokens,
-                                      final_add_bos,
-                                      final_parse_special)
+        let n: Int32 = llama_tokenize(self.vocab, query, Int32(utf8_count), &embeddings,
+                                      n_tokens, final_add_bos, final_parse_special)
         if n <= 0 {
             return []
         }

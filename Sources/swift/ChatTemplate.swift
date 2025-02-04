@@ -1,17 +1,72 @@
-//
-//  ChatTemplate.swift
-//  llamacpp_swift
-//
-//  Created by Qi Wang on 2025-01-31.
-//
-
-
 import Foundation
 import Jinja
 
-/// A Swift approximation of your C++ minja::chat_template
-/// The idea: store the template source, parse it, track booleans like
-/// supports_tools_, and supply an `apply(...)` method that "renders".
+/// Enum representing the message roles (excluding tool messages).
+public enum MessageRole: String {
+    case user = "user"
+    case system = "system"
+    case assistant = "assistant"
+}
+
+/// A structure representing a single tool call.
+public struct ToolCall {
+    public var id: String?
+    public var type: String
+    public var functionName: String
+    public var arguments: Any?  // This can be a String or a Dictionary
+    
+    public init(id: String? = nil, type: String, functionName: String, arguments: Any? = nil) {
+        self.id = id
+        self.type = type
+        self.functionName = functionName
+        self.arguments = arguments
+    }
+    
+    /// Converts the ToolCall instance into a dictionary.
+    public func toDictionary() -> [String: Any] {
+        var functionDict: [String: Any] = ["name": functionName]
+        if let arguments = arguments {
+            functionDict["arguments"] = arguments
+        }
+        var dict: [String: Any] = [
+            "type": type,
+            "function": functionDict
+        ]
+        if let id = id {
+            dict["id"] = id
+        }
+        return dict
+    }
+    
+    // CHANGED: Added a failable initializer to convert a dictionary back to a ToolCall.
+    public init?(dictionary: [String: Any]) {
+        guard let type = dictionary["type"] as? String,
+              let functionDict = dictionary["function"] as? [String: Any],
+              let name = functionDict["name"] as? String
+        else {
+            return nil
+        }
+        self.type = type
+        self.functionName = name
+        self.arguments = functionDict["arguments"]
+        self.id = dictionary["id"] as? String
+    }
+}
+
+/// Enum representing tool message types.
+public enum ToolMessageType {
+    /// Represents a tool call message.
+    /// When using this case, the role is set to "assistant", content is set to "<none>",
+    /// and the provided tool calls are included.
+    case call(toolCalls: [ToolCall])
+    /// Represents a tool output message.
+    /// When using this case, the role is set to "tool" and the provided content is used.
+    case output(content: String)
+}
+
+/// A Swift approximation of your C++ minja::chat_template.
+/// The idea: store the template source, parse it, track booleans like supports_tools_,
+/// and supply an `apply(...)` method that "renders".
 public class ChatTemplate {
     // MARK: - Corresponding Fields
 
@@ -37,7 +92,10 @@ public class ChatTemplate {
     public init(source: String,
                 bosToken: String,
                 eosToken: String) {
+        // CHANGED: Modify source template as needed.
         self.source = source
+            .replacingOccurrences(of: "is none", with: " == '<none>'")
+            .replacingOccurrences(of: "is not none", with: " != '<none>'")
         self.bosToken = bosToken
         self.eosToken = eosToken
 
@@ -51,7 +109,7 @@ public class ChatTemplate {
         // parse the template
         do {
             // Attempt to render the Jinja template
-            self.jinjaTemplate = try Template(source)
+            self.jinjaTemplate = try Template(self.source)
             print("ChatTemplate successfully parsed Jinja template")
             print(source)
         } catch {
@@ -59,8 +117,8 @@ public class ChatTemplate {
             print("Source: \(self.source)")
         }
 
-        // check if the source references "tools"
-        if source.range(of: "tools", options: .caseInsensitive) != nil {
+        // check if the source references "tool_calls"
+        if source.range(of: "tool_calls", options: .caseInsensitive) != nil {
             self.supportsTools = true
         }
 
@@ -72,21 +130,13 @@ public class ChatTemplate {
         // Try the "tryRawRender" approach to see if it generates certain text:
         let testStringArgs = tryRawRender(
             messages: [
-                [
-                    "role": "user",
-                    "content": "Hey"
-                ],
-                [
-                    "role": "assistant",
-                    "tool_calls": [[
-                        "id": "call_1___",
-                        "type": "function",
-                        "function": [
-                            "arguments": "{\"code\": \"print('Hello, World!')\"}",
-                            "name": "ipython"
-                        ]
-                    ]]
-                ]
+                ChatTemplate.createMessage(role: .user, content: "Hey"),
+                ChatTemplate.createToolMessage(type: .call(toolCalls: [
+                    ToolCall(id: "call_1___",
+                             type: "function",
+                             functionName: "ipython",
+                             arguments: "{\"code\": \"print('Hello, World!')\"}")
+                ]))
             ],
             tools: [:],
             addGenerationPrompt: false,
@@ -98,23 +148,15 @@ public class ChatTemplate {
             // check the object-arguments approach
             let testObjectArgs = tryRawRender(
                 messages: [
-                    [
-                        "role": "user",
-                        "content": "Hey"
-                    ],
-                    [
-                        "role": "assistant",
-                        "tool_calls": [[
-                            "id": "call_1___",
-                            "type": "function",
-                            "function": [
-                                "arguments": [
-                                    "code": "print('Hello, World!')"
-                                ],
-                                "name": "ipython"
-                            ]
-                        ]]
-                    ]
+                    ChatTemplate.createMessage(role: .user, content: "Hey"),
+                    ChatTemplate.createToolMessage(type: .call(toolCalls: [
+                        ToolCall(
+                            id: "call_1___",
+                            type: "function",
+                            functionName: "ipython",
+                            arguments: ["code": "print('Hello, World!')"]
+                        )
+                    ]))
                 ],
                 tools: [:],
                 addGenerationPrompt: false,
@@ -129,14 +171,8 @@ public class ChatTemplate {
         // check if system role is supported
         let testSystem = tryRawRender(
             messages: [
-                [
-                    "role": "system",
-                    "content": "<System Needle>"
-                ],
-                [
-                    "role": "user",
-                    "content": "Hey"
-                ]
+                ChatTemplate.createMessage(role: .system, content: "<System Needle>"),
+                ChatTemplate.createMessage(role: .user, content: "Hey")
             ],
             tools: [:],
             addGenerationPrompt: false,
@@ -149,10 +185,7 @@ public class ChatTemplate {
         // check typed content
         let testTyped1 = tryRawRender(
             messages: [
-                [
-                    "role": "user",
-                    "content": "Hey"
-                ]
+                ChatTemplate.createMessage(role: .user, content: "Hey")
             ],
             tools: [:],
             addGenerationPrompt: false,
@@ -160,15 +193,9 @@ public class ChatTemplate {
         )
         let testTyped2 = tryRawRender(
             messages: [
-                [
-                    "role": "user",
-                    "content": [
-                        [
-                            "type": "text",
-                            "text": "Hey"
-                        ]
-                    ]
-                ]
+                ChatTemplate.createMessage(role: .user, content: [
+                    ["type": "text", "text": "Hey"]
+                ])
             ],
             tools: [:],
             addGenerationPrompt: false,
@@ -177,6 +204,13 @@ public class ChatTemplate {
         let hidesIn1 = !testTyped1.contains("Hey")
         let showsIn2 = testTyped2.contains("Hey")
         self.requiresTypedContent = (hidesIn1 && showsIn2)
+        
+        print("ChatTemplate initialized")
+        print("SupportsTools: \(supportsTools)")
+        print("RequiresObjectArguments: \(requiresObjectArguments)")
+        print("RequiresTypedContent: \(requiresTypedContent)")
+        print("SupportsSystemRole: \(supportsSystemRole)")
+        print("SupportsParallelToolCalls: \(supportsParallelToolCalls)")
     }
 
     // MARK: - apply()
@@ -185,78 +219,103 @@ public class ChatTemplate {
     /// The `messages`, `tools`, `extraContext` are Swift dictionaries/arrays,
     /// typically parsed from JSON or constructed by the caller.
     ///
-    /// - parameter messages: array-of-dictionaries describing user, system, or assistant messages.
-    /// - parameter tools: extra tool info.
-    /// - parameter addGenerationPrompt: if true, we do some special logic (like adding an EOS?)
-    /// - parameter extraContext: further dictionary data for the template
-    /// - parameter adjustInputs: whether to fix messages if e.g. we do not support system role, etc.
-    /// - returns: the final rendered prompt string
+    /// - parameter messages: Array-of-dictionaries describing user, system, or assistant messages.
+    /// - parameter tools: Extra tool info.
+    /// - parameter addGenerationPrompt: If true, we do some special logic (like adding an EOS?).
+    /// - parameter extraContext: Further dictionary data for the template.
+    /// - parameter adjustInputs: Whether to fix messages if, for example, we do not support system role.
+    /// - returns: The final rendered prompt string.
     public func apply(
-        messages: [[String: Any]],
+        messages finalMessages: [[String: Any]],
         tools: [String: Any],
         addGenerationPrompt: Bool,
         extraContext: [String: Any] = [:],
-        adjustInputs: Bool = true
+        adjustInputs: Bool = true,
+        dryRun: Bool = false
     ) -> String {
-        // optional rewriting of messages
-        let finalMessages: [[String: Any]]
-        if adjustInputs {
-            finalMessages = fixMessagesIfNeeded(messages)
-        } else {
-            finalMessages = messages
+        let finalMessages = adjustInputs ? fixMessagesIfNeeded(finalMessages) : finalMessages
+        
+        // Build the base context using the high-level API.
+        var context = createJinjaContext(addGenerationPrompt: addGenerationPrompt)
+        
+        // CHANGED: Instead of operating on context["messages"], operate on a separate messages variable.
+        var messages: [[String: Any]] = context["messages"] as? [[String: Any]] ?? [[String: Any]]()
+        
+        for msg in finalMessages {
+            guard let roleStr = msg["role"] as? String else { continue }
+            if roleStr == MessageRole.system.rawValue {
+                let content = msg["content"] as? String
+                messages = addMessage(to: &messages, role: .system, content: content)
+            } else if roleStr == MessageRole.user.rawValue {
+                let content = msg["content"] as? String
+                messages = addMessage(to: &messages, role: .user, content: content)
+            } else if roleStr == MessageRole.assistant.rawValue {
+                if let toolCalls = msg["tool_calls"] as? [ToolCall] {
+                    messages = addToolMessage(to: &messages, type: .call(toolCalls: toolCalls))
+                } else if let toolCallsArray = msg["tool_calls"] as? [[String: Any]] {
+                    let toolCalls = toolCallsArray.compactMap { ToolCall(dictionary: $0) }
+                    messages = addToolMessage(to: &messages, type: .call(toolCalls: toolCalls))
+                } else {
+                    let content = msg["content"] as? String
+                    messages = addMessage(to: &messages, role: .assistant, content: content)
+                }
+            } else if roleStr == "tool" {
+                let content = msg["content"] as? String ?? ""
+                messages = addToolMessage(to: &messages, type: .output(content: content))
+            } else {
+                let content = msg["content"] as? String
+                messages = addMessage(to: &messages, role: .user, content: content)
+            }
         }
-
-        // build up the dictionary that will be given to the template
-        var context: [String: Any] = [
-            "messages": finalMessages,
-            "add_generation_prompt": addGenerationPrompt,
-            "bos_token": bosToken,
-            "eos_token": eosToken
-        ]
+        
+        // Put the updated messages array back into context.
+        context["messages"] = messages
+        
         if !tools.isEmpty {
             context["tools"] = tools
         }
         for (k, v) in extraContext {
             context[k] = v
         }
-        print("ChatTemplate.apply. Final Context\n[BEGIN CONTEXT]")
-        print(context)
-        print("[END CONTEXT]\n")
-
-        // now do the "render"
+        if !dryRun {
+            print("ChatTemplate.apply. Final Context\n[BEGIN CONTEXT]")
+            print(context)
+            print("[END CONTEXT]\n")
+        }
+        
         do {
             let prompt = try self.jinjaTemplate?.render(context) ?? "JINJA ERROR"
             return prompt
         } catch {
-            print("ChatTemplate.apply error: \(error)")
-            print("context: \(context)")
+            if !dryRun {
+                print("ChatTemplate.apply error: \(error)")
+                print("context: \(context)")
+            }
         }
         return "JINJA PARSE ERROR"
     }
 
-    // MARK: - “tryRawRender” helper
+    // MARK: - tryRawRender Helper
 
     /// Replicates your original "try_raw_render" logic:
-    /// We do an apply(...) with adjustInputs=false,
-    /// and if something fails, we return "".
+    /// We do an apply(...) with adjustInputs=false, and if something fails, we return "".
     private func tryRawRender(
         messages: [[String: Any]],
         tools: [String: Any],
         addGenerationPrompt: Bool,
         extraContext: [String: Any]
     ) -> String {
-        // In Swift, we rarely use exceptions for normal control, but let's illustrate
         do {
             let rendered = apply(
                 messages: messages,
                 tools: tools,
                 addGenerationPrompt: addGenerationPrompt,
                 extraContext: extraContext,
-                adjustInputs: false
+                adjustInputs: false,
+                dryRun: true
             )
             return rendered
         } catch {
-            // If we had an error
             return ""
         }
     }
@@ -264,43 +323,34 @@ public class ChatTemplate {
     // MARK: - fixMessagesIfNeeded
 
     /// Similar to your original logic that merges system messages or rewrites them if we do not
-    /// support system roles, or changes “tool” roles if we do not support them, etc.
+    /// support system roles, or changes "tool" roles if we do not support them, etc.
     private func fixMessagesIfNeeded(_ messages: [[String: Any]]) -> [[String: Any]] {
         var newMessages = [[String: Any]]()
         var pendingSystem = ""
 
         for msg in messages {
-            guard let role = msg["role"] as? String else {
-                // ignoring or throw an error
-                continue
-            }
+            guard let role = msg["role"] as? String else { continue }
             var updated = msg
 
-            // If we do not support system role, accumulate into pendingSystem
             if role == "system" && !supportsSystemRole {
                 if let content = msg["content"] as? String {
                     if !pendingSystem.isEmpty { pendingSystem += "\n" }
                     pendingSystem += content
                 }
-                // skip adding to newMessages
                 continue
             }
 
-            // If we do not support tools but user added "tool_calls", remove them
             if !supportsTools && msg.keys.contains("tool_calls") {
-                // remove "tool_calls"
                 var copy = updated
                 copy.removeValue(forKey: "tool_calls")
                 updated = copy
             }
 
-            // If the role was "tool" but we do not support tools, rewrite the role to "user"
             if role == "tool" && !supportsTools {
-                updated["role"] = "user"
+                updated["role"] = MessageRole.user.rawValue
             }
 
-            // merge any pendingSystem text if we see a user role
-            if role == "user" && !pendingSystem.isEmpty {
+            if role == MessageRole.user.rawValue && !pendingSystem.isEmpty {
                 let oldContent = (updated["content"] as? String) ?? ""
                 updated["content"] = pendingSystem + (oldContent.isEmpty ? "" : "\n" + oldContent)
                 pendingSystem = ""
@@ -309,10 +359,9 @@ public class ChatTemplate {
             newMessages.append(updated)
         }
 
-        // If we still have leftover system text, optionally append as user
         if !pendingSystem.isEmpty {
             newMessages.append([
-                "role": "user",
+                "role": MessageRole.user.rawValue,
                 "content": pendingSystem
             ])
             pendingSystem = ""
@@ -320,5 +369,85 @@ public class ChatTemplate {
 
         return newMessages
     }
+    
+    // MARK: - High-Level Jinja2 Context Management
 
+    /// Creates the base Jinja2 context with basic settings.
+    /// Uses the ChatTemplate's bosToken property.
+    ///
+    /// - parameter addGenerationPrompt: A Boolean flag indicating whether to add a generation prompt.
+    /// - returns: A dictionary representing the initial context.
+    public func createJinjaContext(addGenerationPrompt: Bool) -> [String: Any] {
+        return [
+            "bos_token": self.bosToken,
+            "add_generation_prompt": addGenerationPrompt,
+            "messages": [[String: Any]]()
+        ]
+    }
+
+    /// Adds a regular message to the messages array.
+    ///
+    /// - Parameters:
+    ///   - messages: The messages array to update.
+    ///   - role: The role of the message.
+    ///   - content: The content of the message.
+    /// - Returns: The updated messages array.
+    public func addMessage(to messages: inout [[String: Any]], role: MessageRole, content: Any?) -> [[String: Any]] {
+        let message: [String: Any] = [
+            "role": role.rawValue,
+            "content": content ?? NSNull()
+        ]
+        messages.append(message)
+        return messages
+    }
+
+    /// Adds a tool-related message to the messages array.
+    ///
+    /// - Parameters:
+    ///   - messages: The messages array to update.
+    ///   - type: The type of tool message (call or output).
+    /// - Returns: The updated messages array.
+    public func addToolMessage(to messages: inout [[String: Any]], type: ToolMessageType) -> [[String: Any]] {
+        var message: [String: Any] = [:]
+        switch type {
+        case .call(let toolCalls):
+            message["role"] = MessageRole.assistant.rawValue
+            message["content"] = "<none>"
+            message["tool_calls"] = toolCalls.map { $0.toDictionary() }
+        case .output(let content):
+            message["role"] = "tool"
+            message["content"] = content
+        }
+        messages.append(message)
+        return messages
+    }
+
+    /// Creates and returns a regular message dictionary.
+    ///
+    /// - Parameters:
+    ///   - role: The message role.
+    ///   - content: The content of the message.
+    /// - Returns: A dictionary representing the message.
+    public static func createMessage(role: MessageRole, content: Any?) -> [String: Any] {
+        return [
+            "role": role.rawValue,
+            "content": content ?? "<none>"
+        ]
+    }
+
+    /// Updated createToolMessage() function that accepts a ToolMessageType.
+    /// For the call case, it converts a list of ToolCall instances into dictionaries.
+    public static func createToolMessage(type: ToolMessageType) -> [String: Any] {
+        var message: [String: Any] = [:]
+        switch type {
+        case .call(let toolCalls):
+            message["role"] = MessageRole.assistant.rawValue
+            message["content"] = "<none>"
+            message["tool_calls"] = toolCalls.map { $0.toDictionary() }
+        case .output(let content):
+            message["role"] = "tool"
+            message["content"] = content
+        }
+        return message
+    }
 }

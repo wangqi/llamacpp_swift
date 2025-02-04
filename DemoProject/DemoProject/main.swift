@@ -72,6 +72,7 @@ if let input = readLine(), let mode = Int(input) {
 if testMode == 6 {
     model = try Model(modelPath: modelPath)
     llama = LLama(model: model!)
+    await llama?.load_chat_template()
 } else {
     ai = load_ai(modelPath: modelPath)
 }

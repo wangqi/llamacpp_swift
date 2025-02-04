@@ -684,15 +684,8 @@ public class LLaMa: LLMBase {
             
             // Build the messages array for chat template
             let messages: [[String: Any]] = [
-                ["role": "system", "content": systemQuery],
-                ["role": "user", "content": userQuery],
-                /*
-                [
-                    "role": "assistant",
-                    "content": NSNull(),
-                    "tool_calls": []
-                ]
-                 */
+                ChatTemplate.createMessage(role: .system, content: systemQuery),
+                ChatTemplate.createMessage(role: .user, content: userQuery)
             ]
             
             if let template = self.chatTemplate {

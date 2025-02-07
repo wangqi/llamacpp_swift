@@ -452,7 +452,8 @@ public class LLaMa: LLMBase {
         // spm_llama_sampling_sample picks a token
         let id = spm_llama_sampling_sample(ctxSampling: self.samplingContext, ctxMain: self.context, idx: -1, grammarFirst: false)
         // Then accept that token so grammar or rep-penalty states are updated
-        spm_llama_sampling_accept(ctxSampling: self.samplingContext, ctxMain: self.context, token: id, applyGrammar: true)
+        // It is already called in spm_llama_sampling_sample()
+        // spm_llama_sampling_accept(ctxSampling: self.samplingContext, ctxMain: self.context, token: id, applyGrammar: true)
         return id
     }
     

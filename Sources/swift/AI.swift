@@ -495,6 +495,7 @@ public struct ModelAndContextParams {
     public var system_prompt = ""
     
     public var f16Kv = true         // use fp16 for KV cache
+    // the llama_decode() call computes all logits, not just the last one (DEPRECATED - set llama_batch.logits instead)
     public var logitsAll = false    // the llama_eval() call computes all logits, not just the last one
     public var vocabOnly = false    // only load the vocabulary, no weights
     public var useMlock = false     // force system to keep model in RAM
@@ -568,6 +569,54 @@ public struct ModelSampleParams {
     public var mirostat_tau: Float
     public var mirostat_eta: Float
     public var penalize_nl: Bool
+    public var use_metal: Bool
+    
+    /// Controls the severity of the penalty applied when a token violates constraints during sampling.
+    /// Higher values encourage the model to be more creative by exploring less frequently chosen tokens.
+    /// - Values like 1.0 (mild penalty) to 2.0 or higher (aggressive penalty) are used.
+    /// - Default: 1.0
+    public var dryMultiplier: Float       = 1.0
+
+    /// Specifies how many tokens can be generated without triggering a penalty based on the dry run constraints.
+    /// If the token violates some penalty rules (e.g., frequency, repetition), dry_base sets a baseline penalty before applying dry_multiplier.
+    /// - Range: Values around 0.5 to 1.0 are common
+    /// - Default: 1.0
+    public var dryBase: Float             = 1.0
+
+    /// Maximum allowed token sequence length for applying dry sampling adjustments.
+    /// If dry_allowed_length is too low, penalties will trigger too early, possibly interrupting coherent sequences.
+    /// Setting it too high may allow too much repetition or off-topic output before corrections occur.
+    /// - Range: Usually depends on the application, but could range from 5 tokens to 100 tokens.
+    /// - Default: 0
+    public var dryAllowedLength: Int32    = 0
+
+    /// Specifies the number of previously generated tokens to consider when applying the dry run penalty for repetition.
+    /// - Range: Common values range between 10 and 100 tokens.
+    /// - Default: 64
+    public var dryPenaltyLastN: Int32     = 64
+
+    /// List of token sequences that, if encountered, will break the dry sampling chain.
+    /// - Default: empty array
+    public var drySequenceBreakers: [String] = []
+
+    /// Used in extended token constraints (XTC) sampling to limit certain tokens based on predefined conditions.
+    /// It defines the probability threshold for sampling from a constrained set of tokens.
+    /// Lower xtc_probability values allow more diversity, while higher values enforce stricter control over token selection based on constraints.
+    /// - Range:  Values between 0.5 and 1.0 are common.
+    /// - Default: 0.0 (disabled)
+    public var xtcProbability: Float      = 0.0
+
+    /// Represents the logit threshold for a token to be considered valid under extended token constraints (XTC).
+    /// Values vary depending on how aggressively you want to filter tokens:
+    /// - Range: Low values (e.g., -10): Loosely penalize tokens, allowing most to pass.
+    ///         Higher values (e.g., -1): Strongly restrict token choices.
+    /// - Default: 0.0 (disabled)
+    public var xtcThreshold: Float        = 0.0
+
+    /// Minimum number of tokens to keep in sampling operations (e.g. top-p, typical).
+    /// - Range: positive integer
+    /// - Default: 1
+    public var minKeep: Int32             = 1
     
     public static let `default` = ModelSampleParams(
         n_batch: 5,
@@ -584,7 +633,16 @@ public struct ModelSampleParams {
         mirostat: 0,
         mirostat_tau: 5.0,
         mirostat_eta: 0.1,
-        penalize_nl: true
+        penalize_nl: true,
+        //New Added params
+        dryMultiplier: 0.0,
+        dryBase: 1.75,
+        dryAllowedLength: 2,
+        dryPenaltyLastN: 64,
+        xtcProbability: 0.0,
+        xtcThreshold: 0.1,
+        minKeep: 1,
+        use_metal: true
     )
     
     public init(n_batch: Int32 = 5,
@@ -602,6 +660,14 @@ public struct ModelSampleParams {
                 mirostat_tau: Float = 5.0,
                 mirostat_eta: Float = 0.1,
                 penalize_nl: Bool = true,
+                //New Added params
+                dryMultiplier: Float = 0.0,
+                dryBase: Float = 1.75,
+                dryAllowedLength: Int32 = 2,
+                dryPenaltyLastN: Int32 = 64,
+                xtcProbability: Float = 0.0,
+                xtcThreshold: Float = 0.1,
+                minKeep: Int32 = 1,
                 use_metal:Bool = true) {
         self.n_batch = n_batch
         self.temp = temp
@@ -618,6 +684,14 @@ public struct ModelSampleParams {
         self.mirostat_eta = mirostat_eta
         self.penalize_nl = penalize_nl
         self.min_p = 0
+        self.dryMultiplier = dryMultiplier
+        self.dryBase = dryBase
+        self.dryAllowedLength = dryAllowedLength
+        self.dryPenaltyLastN = dryPenaltyLastN
+        self.xtcProbability = xtcProbability
+        self.xtcThreshold = xtcThreshold
+        self.minKeep = minKeep
+        self.use_metal = use_metal
     }
 }
 

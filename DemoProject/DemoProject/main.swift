@@ -35,11 +35,15 @@ func load_ai(modelPath: String) -> AI {
     }
 
     // Configure sampling parameters
-    ai.model?.sampleParams.temp = 0.6
-    ai.model?.sampleParams.mirostat = 2
+    ai.model?.sampleParams.temp = 0.8
+    ai.model?.sampleParams.mirostat = 0
     ai.model?.sampleParams.mirostat_eta = 0.1
     ai.model?.sampleParams.mirostat_tau = 5.0
+    ai.model?.sampleParams.dryAllowedLength = 2
+    ai.model?.sampleParams.dryPenaltyLastN = 4096
     ai.model?.contextParams.context = 4096
+    ai.model?.contextParams.add_bos_token = false
+    ai.model?.contextParams.add_eos_token = false
 
     try? ai.loadModel_sync()
     return ai
@@ -58,11 +62,13 @@ print("3. Callback Stream")
 print("4. Combine Stream")
 print("5. MainCPP")
 print("6. llama-cpp-swift")
+print("7. simple-chat")
 
 
 var ai: AI?
 var model: Model?
 var llama: LLama?
+var simpleChat: SimpleChat?
 
 var testMode = 1  // Default to traditional predict
 if let input = readLine(), let mode = Int(input) {
@@ -73,6 +79,12 @@ if testMode == 6 {
     model = try Model(modelPath: modelPath)
     llama = LLama(model: model!)
     await llama?.load_chat_template()
+} else if testMode == 7 {
+    simpleChat = SimpleChat(modelPath: modelPath)
+    guard simpleChat != nil else {
+        print("Failed to initialize SimpleChat")
+        exit(1)
+    }
 } else {
     ai = load_ai(modelPath: modelPath)
 }
@@ -102,6 +114,12 @@ while true {
         MainCPP.main(path: modelPath)
     case 6:
         try await testLlamacppswift(model: model!, llama: llama!, query: query)
+    case 7:
+        if let chat = simpleChat {
+            testSimpleChat(chat: chat, query: query)
+        } else {
+            print("Error: SimpleChat not initialized")
+        }
     default:
         testPredict(ai: ai!, query: query)
     }

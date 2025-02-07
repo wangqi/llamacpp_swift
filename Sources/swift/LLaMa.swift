@@ -715,7 +715,7 @@ public class LLaMa: LLMBase {
                     messages: messages,
                     tools: [:],
                     addGenerationPrompt: true,
-                    extraContext: final_add_bos ? ["bos_token": "<s>"] : [:]
+                    extraContext: final_add_bos ? ["bos_token": llm_bos_token_str] : [:]
                 )
             } else {
                 print("LLaMa.chatTemplate is nil. Using input directly as query.")

@@ -62,9 +62,18 @@ public class LLaMa: LLMBase {
 
         // Grammar path
         spmParams.grammarPath         = self.contextParams.grammar_path ?? ""
+        
+        // New added params
+        spmParams.dryMultiplier       = self.sampleParams.dryMultiplier
+        spmParams.dryBase             = self.sampleParams.dryBase
+        spmParams.dryAllowedLength    = self.sampleParams.dryAllowedLength
+        spmParams.dryPenaltyLastN     = self.sampleParams.dryPenaltyLastN
+        spmParams.xtcProbability      = self.sampleParams.xtcProbability
+        spmParams.xtcThreshold        = self.sampleParams.xtcThreshold
+        spmParams.minKeep             = self.sampleParams.minKeep
 
         // Now call the updated function with the struct
-        self.samplingContext = init_sampling(model: model, params: spmParams)
+        self.samplingContext = init_sampling(model: model, vocab: vocab, params: spmParams)
     }
     
     // MARK: - deinit
@@ -144,7 +153,6 @@ public class LLaMa: LLMBase {
         context_params.logits_all  = contextParams.logitsAll
         context_params.flash_attn  = contextParams.flash_attn
         // context_params.flash_attn = false
-
         
         // Setup model parameters
         model_params.vocab_only = contextParams.vocabOnly
@@ -185,6 +193,19 @@ public class LLaMa: LLMBase {
 
         // Initialize the llama backend
         llama_backend_init()
+        // NUMA-aware memory allocation and processing in LLaMA’s implementation
+        // The function llama_numa_init initializes NUMA-related memory management
+        // for LLaMA by selecting a strategy (based on the provided configuration)
+        // to allocate and access memory efficiently on NUMA systems
+        // Mac M1/M2 Macs and iOS devices (iPhones, iPads) do not have NUMA architectures.
+        /*
+         GGML_NUMA_STRATEGY_DISABLED   = 0,
+         GGML_NUMA_STRATEGY_DISTRIBUTE = 1,
+         GGML_NUMA_STRATEGY_ISOLATE    = 2,
+         GGML_NUMA_STRATEGY_NUMACTL    = 3,
+         GGML_NUMA_STRATEGY_MIRROR     = 4,
+         */
+        llama_numa_init(GGML_NUMA_STRATEGY_DISABLED);
 
         // Attempt model load with error capture
         try ExceptionCather.catchException {
@@ -195,9 +216,6 @@ public class LLaMa: LLMBase {
             destroy_objects()
             return false
         }
-
-        // Initialize sampling context
-        init_sampling_param()
 
         // Attempt context creation
         try ExceptionCather.catchException {
@@ -225,6 +243,9 @@ public class LLaMa: LLMBase {
             // Optionally set the last logits field to 1 (true) for the first set
             batch.logits[Int(sampleParams.n_batch) - 1] = 1
         }
+        
+        // Initialize sampling context
+        init_sampling_param()
         
         // Get model's chat template
         let modelChatTemplate = self.load_chat_template() ?? """

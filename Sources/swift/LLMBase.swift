@@ -491,6 +491,7 @@ public class LLMBase {
             
             let inputTokensCount = inputTokens.count
             print("Input tokens: \(inputTokens)")
+            print("[BEGIN AI]\n")
             
             if inputTokensCount > contextLength {
                 throw ModelError.inputTooLong
@@ -524,7 +525,7 @@ public class LLMBase {
                 // If token is EOG/EOS, break
                 if self.llm_token_is_eog(token: outputToken) {
                     completion_loop = false
-                    print("[EOG]")
+//                    print("[EOG]")
                     break
                 }
                 
@@ -597,7 +598,7 @@ public class LLMBase {
             let endTime = Date()
             let processingTime = endTime.timeIntervalSince(startTime) * 1000
             
-            print("Total tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
+            print("\n[END AI]\nTotal tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
             completion(fullOutput.joined(), processingTime, nil)
             
         } catch {

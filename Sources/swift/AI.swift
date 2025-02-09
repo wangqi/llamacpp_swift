@@ -511,14 +511,17 @@ public struct ModelAndContextParams {
     public var flash_attn = false
     public var save_load_state = true
     
-    
     public var warm_prompt = "\n\n\n"
-
     public var reverse_prompt: [String] = []
-    
     public var trim_words: [String] = []
     
     public var clip_model:String? = nil
+   
+    //New parameters
+    public var grp_attn_n = 1; // group-attention factor
+    public var grp_attn_w = 512; // group-attention width
+    // number of tokens to keep when resetting context
+    public var n_keep = 512
 
     public static let `default` = ModelAndContextParams()
     
@@ -619,7 +622,7 @@ public struct ModelSampleParams {
     public var minKeep: Int32             = 1
     
     public static let `default` = ModelSampleParams(
-        n_batch: 5,
+        n_batch: 512,
         temp: 0.7,
         top_k: 40,
         top_p: 0.95,
@@ -645,7 +648,7 @@ public struct ModelSampleParams {
         use_metal: true
     )
     
-    public init(n_batch: Int32 = 5,
+    public init(n_batch: Int32 = 512,
                 temp: Float = 0.9,
                 top_k: Int32 = 40,
                 top_p: Float = 0.95,

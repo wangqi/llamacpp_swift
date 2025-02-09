@@ -237,12 +237,11 @@ public class LLaMa: LLMBase {
         // Attempt to restore previously saved state if needed
         self.load_state()
         
-        // Create a new batch
+        // llama_batch_init(tokens.size(), 0, 1). n_max_seq = 0 indicates a single sequence
+        // (the library internally sets batch.seq_id[i] = nullptr), and n_ctx_train = 1 for that trivial snippet.
+        //
+        // llama_batch_init(int32_t n_tokens_alloc, int32_t embd, int32_t n_seq_max)
         self.batch = llama_batch_init(sampleParams.n_batch, 0, 1)
-        if let batch = self.batch {
-            // Optionally set the last logits field to 1 (true) for the first set
-            batch.logits[Int(sampleParams.n_batch) - 1] = 1
-        }
         
         // Initialize sampling context
         init_sampling_param()
@@ -382,6 +381,13 @@ public class LLaMa: LLMBase {
         return llama_get_logits(self.context)
     }
     
+    //  Overriding token-is-EOG using llama_vocab_is_eog
+    // This ensures T5 or other models that have EOG != EOS are handled.
+    public override func llm_token_is_eog(token: ModelToken) -> Bool {
+        // bridging to C++: llama_vocab_is_eog(vocab, token)
+        return llama_vocab_is_eog(self.vocab, token)
+    }
+    
     // load_grammar is empty here—check if you really need to do something
     public override func load_grammar(_ path: String) throws -> Void {
         do {
@@ -491,11 +497,9 @@ public class LLaMa: LLMBase {
         for (idx, token) in inputBatch.enumerated() {
             let isLast = (idx == inputBatch.count - 1)
             let position = self.nPast + Int32(idx)  // or just Int32(idx) if you manage nPast elsewhere
-            llama_batch_add(&self.batch!,
-                            token,
-                            position,
-                            [0],     // seq_ids array, often [0] if single sequence
-                            isLast)  // true if we want logits for the last token
+            // seq_ids array, often [0] if single sequence
+            // true if we want logits for the last token
+            llama_batch_add(&self.batch!, token, position, [0], isLast)
         }
         
         // 3) Perform the decode using llama_decode
@@ -504,26 +508,9 @@ public class LLaMa: LLMBase {
             return false
         }
         
-        // Optional: If you want to automatically update nPast here, uncomment:
-        // self.nPast += Int32(inputBatch.count)
-        
         return true
     }
     
-    /**
-     This function claims to "forget" the last N tokens, but currently ignores `N` and
-     calls `llama_kv_cache_seq_rm(self.context, -1, 0, -1)`, which likely removes
-     everything in the KV cache. If the intent is to remove exactly N tokens from the end,
-     you'll need to adjust your call to pass the correct offsets.
-
-     - Parameter N: Number of tokens to forget, but is currently ignored.
-     */
-    public override func ForgotLastNTokens(_ N: Int32) {
-        // BUG: Ignores N. The call below typically means "rm from seq_id = -1, pos = 0, end = -1",
-        // which could remove the entire context or be an undefined range. Adjust accordingly.
-        llama_kv_cache_seq_rm(self.context, -1, N, -1)
-    }
-
     /**
      Shifts the KV cache by discarding half of nPast starting after repeat_last_n.
      Then sets nPast = nPast - n_discard + 1.
@@ -531,19 +518,63 @@ public class LLaMa: LLMBase {
      (e.g., if nPast < 2 or if n_discard is bigger than the valid range).
      */
     public override func KVShift() throws {
-        let n_discard = self.nPast / 2
+        /*
+         // Original C++ codes
+         const int n_left    = n_past - params.n_keep;
+         const int n_discard = n_left/2;
+
+         llama_kv_cache_seq_rm (ctx, 0, params.n_keep            , params.n_keep + n_discard);
+         llama_kv_cache_seq_add(ctx, 0, params.n_keep + n_discard, n_past, -n_discard);
+
+         n_past -= n_discard;
+         path_session.clear();
+         */
+        // GQA additions: read number of groups (ga_n) and window (ga_w).
+        // If ga_n <= 1, we do the usual KV shift approach. If ga_n > 1, we do the GQA "self-extend" approach.
+        let ga_n = Int32(self.contextParams.grp_attn_n)
+        let ga_w = Int32(self.contextParams.grp_attn_w)
         
-        // Removes tokens from repeat_last_n to repeat_last_n + n_discard
-        llama_kv_cache_seq_rm(context, 0, self.sampleParams.repeat_last_n,
-                              self.sampleParams.repeat_last_n + n_discard)
+        // If GQA is disabled or ga_n == 1, fallback to standard KV shift
+        guard ga_n > 1 else {
+            // Original KV shift logic
+            let n_keep = Int32(self.contextParams.n_keep)  // <-- Ensure your ModelAndContextParams has n_keep
+            let n_left = self.nPast - n_keep
+            if n_left <= 0 {
+                print("LLaMa.KVShift: nothing to discard, nPast <= n_keep.")
+                return
+            }
+            let n_discard = n_left / 2
+            
+            // Removes tokens from repeat_last_n to repeat_last_n + n_discard
+            llama_kv_cache_seq_rm(context, 0, n_keep, n_keep + n_discard)
+            llama_kv_cache_seq_add(context, 0, n_keep + n_discard, self.nPast, -n_discard)
+            
+            self.nPast -= n_discard
+            return
+        }
+        // Otherwise, do the GQA self-extend approach
+        // We replicate the relevant snippet from llama.cpp:
+        print("KVShift: GQA mode, ga_n=\(ga_n), ga_w=\(ga_w), nPast=\(self.nPast)")
+        var ga_i: Int32 = 0
         
-        llama_kv_cache_seq_add(context, 0,
-                               self.sampleParams.repeat_last_n + n_discard,
-                               self.nPast, -n_discard)
-        
-        self.nPast -= n_discard
-        self.nPast += 1
-        // print("Context Limit!")
+        // Keep shifting as long as n_past >= ga_i + ga_w
+        while self.nPast >= ga_i + ga_w {
+            let ib = (ga_n * ga_i) / ga_w
+            let bd = (ga_w / ga_n) * (ga_n - 1)
+            let dd = (ga_w / ga_n) - ib * bd - ga_w
+            
+            // For clarity, print debug info
+            print("LLaMa.KVShift() GQA SHIFT step: ga_i=\(ga_i), ib=\(ib), bd=\(bd), dd=\(dd), nPast=\(nPast)")
+            
+            // llama_kv_cache_seq_add(ctx, seq_id=0, p0, p1, delta)
+            llama_kv_cache_seq_add(context, 0, ga_i, nPast, ib*bd)
+            llama_kv_cache_seq_div(context, 0, ga_i + ib*bd, ga_i + ib*bd + ga_w, ga_n)
+            llama_kv_cache_seq_add(context, 0, ga_i + ib*bd + ga_w, nPast + ib*bd, dd)
+            
+            self.nPast -= bd
+            ga_i += ga_w / ga_n
+            print("LLaMa.KVShift() GQA SHIFT updated: nPast=\(nPast), ga_i=\(ga_i)\n")
+        }
     }
     
     // MARK: - LLaMa Batch
@@ -634,44 +665,53 @@ public class LLaMa: LLMBase {
         }
     }
     
-    /**
-     Converts a token to its string representation. Accumulates partial UTF-8 bytes
-     until a valid string can be formed. If the partial data cannot form a valid UTF-8
-     string, attempts to parse suffixes. If you often have partial tokens from streaming,
-     you can refine this logic or track partial merges carefully.
-     //todo: This partial UTF-8 accumulation logic may discard or lose data if not tested thoroughly.
-     
-     - Returns: A valid UTF-8 string or an empty string if still partial/invalid.
-     */
+    /// Converts a token into a string using a shortest-first approach.
+    ///
+    /// - Parameter outputToken: An integer token that is converted to its corresponding UTF-8 bytes.
+    /// - Returns: A string containing the valid UTF-8 text formed by the new bytes, or an empty string if no valid suffix is available.
     public override func LLMTokenToStr(outputToken: Int32) -> String? {
-        let new_token_cchars = token_to_piece(token: outputToken)
-        temporary_invalid_cchars.append(contentsOf: new_token_cchars)
+        // Convert the token into its UTF-8 byte sequence.
+        let newTokenCChars = token_to_piece(token: outputToken)
+        // Append the new bytes to our buffer.
+        temporary_invalid_cchars.append(contentsOf: newTokenCChars)
         
-        let new_token_str: String
-        if let string = String(validatingUTF8: temporary_invalid_cchars + [0]) {
-            // If the entire set is now valid
-            temporary_invalid_cchars.removeAll()
-            new_token_str = string
-        } else {
-            // Attempt to see if partial suffix is valid
-            var suffixString: String? = nil
-            for idx in 1..<temporary_invalid_cchars.count {
-                let subSlice = temporary_invalid_cchars.suffix(idx)
-                if let possible = String(validatingUTF8: Array(subSlice) + [0]) {
-                    suffixString = possible
-                    break
-                }
-            }
-            if let partial = suffixString {
-                temporary_invalid_cchars.removeAll()
-                new_token_str = partial
-            } else {
-                new_token_str = ""
+        // Attempt to interpret the entire buffer as a valid UTF-8 string.
+        // Appending a null terminator ([0]) is required because String(validatingUTF8:) expects a C-string.
+        if let validString = String(validatingUTF8: temporary_invalid_cchars + [0]) {
+            // The entire buffer is valid.
+             temporary_invalid_cchars.removeAll()
+            return validString
+        }
+        
+        // The complete buffer is invalid.
+        // Try to salvage a valid substring by looking for the shortest valid suffix.
+        var validSuffix: String? = nil
+        var validSuffixLength = 0
+        
+        // Iterate over possible suffix lengths from 1 up to count - 1.
+        // (We don't check the full length since that was already determined to be invalid.)
+        for idx in 1..<temporary_invalid_cchars.count {
+            let subSlice = temporary_invalid_cchars.suffix(idx)
+            if let s = String(validatingUTF8: Array(subSlice) + [0]) {
+                validSuffix = s
+                validSuffixLength = idx
+                // Stop at the first (shortest) valid suffix.
+                break
             }
         }
-        return new_token_str
+        
+        if let validSuffix = validSuffix {
+            // Remove only the bytes that formed the valid suffix,
+            // leaving any preceding (incomplete) bytes in the buffer.
+             temporary_invalid_cchars.removeAll()
+//            temporary_invalid_cchars.removeLast(validSuffixLength)
+            return validSuffix
+        } else {
+            // No valid suffix was found.
+            return ""
+        }
     }
-    
+
     // MARK: - LLMTokenize()
     
     /**
@@ -689,7 +729,6 @@ public class LLaMa: LLMBase {
      */
     public override func LLMTokenize(_ input: String,
                                      chatTemplate: String? = nil,
-                                     systemPrompt: String? = nil,
                                      add_bos: Bool? = nil,
                                      parse_special: Bool? = nil,
                                      use_template: Bool = true) -> [ModelToken]
@@ -701,12 +740,10 @@ public class LLaMa: LLMBase {
         
         var query = input
         if use_template {
-            let systemQuery = systemPrompt ?? ""
             let userQuery   = input
             
             // Build the messages array for chat template
             let messages: [[String: Any]] = [
-                ChatTemplate.createMessage(role: .system, content: systemQuery),
                 ChatTemplate.createMessage(role: .user, content: userQuery)
             ]
             

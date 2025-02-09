@@ -21,6 +21,7 @@ func load_ai(modelPath: String) -> AI {
     //<|User|>{prompt}<|Assistant|>
     //"""
     params.promptFormat = .Default
+    params.system_prompt = "You are a helpful assistant."
     params.custom_prompt_format = "{prompt}"
     params.use_metal = true
     params.logitsAll = true
@@ -36,7 +37,7 @@ func load_ai(modelPath: String) -> AI {
 
     // Configure sampling parameters
     ai.model?.sampleParams.temp = 0.8
-    ai.model?.sampleParams.mirostat = 0
+    ai.model?.sampleParams.mirostat = 2
     ai.model?.sampleParams.mirostat_eta = 0.1
     ai.model?.sampleParams.mirostat_tau = 5.0
     ai.model?.sampleParams.dryAllowedLength = 2

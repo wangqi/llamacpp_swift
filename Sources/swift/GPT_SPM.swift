@@ -213,54 +213,60 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
     var sparams = llama_sampler_chain_default_params()
     sparams.no_perf = true
     
+    // We store it in SpmSamplerContext
+    let samplerContext = SpmSamplerContext()
+
+    // Build up samplers in the chain:
+    
     // Track sampler chain
     var samplerChain = ["logits"]
-
+    
     // 1) Create the sampler chain
     guard let sampling = llama_sampler_chain_init(sparams) else {
         // If somehow chain creation fails, return empty
         print("GPT_SPM.init_sampling() WARNING: Failed to initialize sampler chain")
         return SpmSamplerContext()
     }
+    samplerContext.sampler = sampling
+    
+    // 2) Add logit-bias sampler ---
+    // Convert Swift array to [llama_logit_bias]
+    print("GPT_SPM.init_sampling() Adding logit bias sampler")
+    // Convert Swift array of bias pairs into C-compatible llama_logit_bias structures.
+    let logitBiasArray = params.logitBias.map { pair in
+        llama_logit_bias(token: pair.token, bias: pair.bias)
+    }
+    let nBias = logitBiasArray.count
 
-    // 2) Add logit-bias sampler if requested ---
-    if !params.logitBias.isEmpty {
-        // Convert Swift array to [llama_logit_bias]
-        print("GPT_SPM.init_sampling() Adding logit bias sampler")
-        let nBias = Int32(params.logitBias.count)
-        var logitBiasArray = [llama_logit_bias](repeating: llama_logit_bias(token: 0, bias: 0.0), count: params.logitBias.count)
-        for (i, pair) in params.logitBias.enumerated() {
-            logitBiasArray[i] = llama_logit_bias(token: pair.token, bias: pair.bias)
-        }
-
-        // Allocate memory & copy
-        let pointer = UnsafeMutablePointer<llama_logit_bias>.allocate(capacity: Int(nBias))
-        pointer.initialize(from: &logitBiasArray, count: Int(nBias))
-
-        // n_vocab from the vocab pointer
-        let vocabCount = llama_vocab_n_tokens(vocab)
-        
-        if let logitBiasSampler = llama_sampler_init_logit_bias(vocabCount, nBias, pointer) {
-            print("GPT_SPM.init_sampling(): Adding logit-bias sampler with \(nBias) entries.")
-            llama_sampler_chain_add(sampling, logitBiasSampler)
-            samplerChain.append("logit-bias")
-        }
-
-        // Deallocate memory to avoid leaks
-        pointer.deinitialize(count: Int(nBias))
+    // Allocate memory for the C array.
+    let pointer = UnsafeMutablePointer<llama_logit_bias>.allocate(capacity: nBias)
+    // Ensure memory is deinitialized and deallocated when done.
+    defer {
+        pointer.deinitialize(count: nBias)
         pointer.deallocate()
     }
+    // Copy the bias values into the allocated memory.
+    logitBiasArray.withUnsafeBufferPointer { buffer in
+        // Assumes that buffer.baseAddress is non-nil because the array is non-empty.
+        pointer.initialize(from: buffer.baseAddress!, count: nBias)
+    }
+    
+    // Get the vocabulary count.
+    let vocabCount = llama_vocab_n_tokens(vocab)
 
-    // We store it in SpmSamplerContext
-    let samplerContext = SpmSamplerContext()
-    samplerContext.sampler = sampling
+    // Initialize and chain the logit-bias sampler if available.
+    if let logitBiasSampler = llama_sampler_init_logit_bias(vocabCount, Int32(nBias), pointer) {
+        print("GPT_SPM.init_sampling(): Adding logit-bias sampler with \(nBias) entries.")
+        llama_sampler_chain_add(sampling, logitBiasSampler)
+        samplerChain.append("logit-bias")
+    }
 
-    // Build up samplers in the chain:
-
-    // 3) Repetition/presence penalties
-    if params.penaltyLastN != 0
-        && (params.penaltyRepeat != 1.0 || params.penaltyFreq != 0.0 || params.penaltyPresent != 0.0) {
-        print("GPT_SPM.init_sampling(). penaltyLastN: \(params.penaltyLastN), penaltyRepeat: \(params.penaltyRepeat), " + 
+    // 8) DRY Handle sampler chain differently based on the mirostat setting.
+    if params.mirostat == 0 {
+        // (A) --- Non-mirostat branch: add optional dry and xtc samplers.
+        
+        // 3) Repetition/presence penalties
+        print("GPT_SPM.init_sampling(). penaltyLastN: \(params.penaltyLastN), penaltyRepeat: \(params.penaltyRepeat), " +
                 "penaltyFreq: \(params.penaltyFreq), penaltyPresent: \(params.penaltyPresent)")
         if let sampler = llama_sampler_init_penalties(
             //penalty_last_n,
@@ -275,47 +281,38 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
             llama_sampler_chain_add(sampling, sampler)
             samplerChain.append("penalties")
         }
-    }
 
-    // 4) Top-k
-    if params.topK > 0 {
-        print("GPT_SPM.init_sampling(). topK: \(params.topK)")
-        if let sampler = llama_sampler_init_top_k(params.topK) {
+        // 4) Top-k
+        let topK = params.topK <= 0 ? 1 : Int32(params.topK)
+        print("GPT_SPM.init_sampling(). topK: \(topK)")
+        if let sampler = llama_sampler_init_top_k(topK) {
             llama_sampler_chain_add(sampling, sampler)
             samplerChain.append("top-k")
         }
-    }
 
-    // 5) Typical
-    if params.typicalP < 0.9999 {
-        print("GPT_SPM.init_sampling(). typicalP: \(params.typicalP)")
-        if let sampler = llama_sampler_init_typical(params.typicalP, 1) {
+        // 5) Typical
+        let typicalP = params.typicalP > 0.9999 ? 0.9999 : params.typicalP
+        print("GPT_SPM.init_sampling(). typicalP: \(typicalP)")
+        if let sampler = llama_sampler_init_typical(typicalP, 1) {
             llama_sampler_chain_add(sampling, sampler)
             samplerChain.append("typicalP")
         }
-    }
 
-    // 6) Top-p
-    if params.topP < 0.9999 {
-        print("GPT_SPM.init_sampling(). topP: \(params.topP)")
-        if let sampler = llama_sampler_init_top_p(params.topP, 1) {
+        // 6) Top-p
+        let topP = params.topP > 0.9999 ? 0.9999 : params.topP
+        print("GPT_SPM.init_sampling(). topP: \(topP)")
+        if let sampler = llama_sampler_init_top_p(topP, 1) {
             llama_sampler_chain_add(sampling, sampler)
             samplerChain.append("top-p")
         }
-    }
 
-    // 7) Min-p
-    if params.minP > 0 && params.minP < 0.9999 {
-        print("GPT_SPM.init_sampling(). minP: \(params.minP)")
-        if let sampler = llama_sampler_init_min_p(params.minP, 1) {
+        // 7) Min-p
+        let minP = params.minP > 0.9999 || params.minP < 0 ? 0.9 : params.minP
+        print("GPT_SPM.init_sampling(). minP: \(minP)")
+        if let sampler = llama_sampler_init_min_p(minP, 1) {
             llama_sampler_chain_add(sampling, sampler)
             samplerChain.append("min-p")
         }
-    }
-
-    // 8) DRY Handle sampler chain differently based on the mirostat setting.
-    if params.mirostat == 0 {
-        // (A) --- Non-mirostat branch: add optional dry and xtc samplers.
 
         // Dry sampler: enable if dryAllowedLength > 0 (i.e. nonzero means enabled).
         if params.dryAllowedLength > 0 {
@@ -372,9 +369,6 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
             }
         }
         
-        llama_sampler_chain_add(sampling, llama_sampler_init_softmax())
-        samplerChain.append("softmax")
-
         // Finally, add the dist (random) sampler.
         if let finalSampler = llama_sampler_init_dist(params.seed) {
             llama_sampler_chain_add(sampling, finalSampler)
@@ -384,7 +378,7 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
         // (B) --- Mirostat v1: add temperature first, then mirostat.
         if params.temp > 0 {
             print("GPT_SPM.init_sampling(). temp (for mirostat): \(params.temp)")
-            if let sampler = llama_sampler_init_temp_ext(params.temp, params.dynaTempRange, params.dynaTempExponent) {
+            if let sampler = llama_sampler_init_temp(params.temp) {
                 llama_sampler_chain_add(sampling, sampler)
                 samplerChain.append("temp-ext")
             }
@@ -399,7 +393,7 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
         // (C) --- Mirostat v2: add temperature then mirostat v2.
         if params.temp > 0 {
             print("GPT_SPM.init_sampling(). temp (for mirostat v2): \(params.temp)")
-            if let sampler = llama_sampler_init_temp_ext(params.temp, params.dynaTempRange, params.dynaTempExponent) {
+            if let sampler = llama_sampler_init_temp(params.temp) {
                 llama_sampler_chain_add(sampling, sampler)
                 samplerChain.append("temp-ext")
             }

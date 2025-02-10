@@ -33,20 +33,165 @@ public struct SpmSamplingParams {
     public var temp: Float               = 0.80
     public var dynaTempRange: Float      = 0.00
     public var dynaTempExponent: Float   = 1.00
+    public var penalizeNl: Bool          = false
     public var penaltyLastN: Int32       = 64
     public var penaltyRepeat: Float      = 1.00
     public var penaltyFreq: Float        = 0.00
     public var penaltyPresent: Float     = 0.00
+    // This parameter selects the version or mode of the Mirostat algorithm to use
+    // 0: Mirostat is disabled (i.e., standard sampling techniques like top-k or top-p are used instead).
+    // 1: Use Mirostat version 1, which focuses on real-time feedback to adjust the sampling process using a simple feedback loop.
+    //    It dynamically adjusts the temperature of the next token selection by comparing the current token’s entropy to a target entropy.
+    // 2: Use Mirostat version 2, an enhanced version with additional stability and convergence features.
+    //    It introduces additional mathematical refinements to improve convergence speed and prediction stability.
     public var mirostat: Int32           = 0
+    // This parameter sets the target entropy level that Mirostat tries to maintain during generation. 
+    // The goal is to ensure that the text generation is neither too chaotic (high entropy) nor too repetitive/deterministic (low entropy).
+    // * Low values (e.g., 2.0): More focused, deterministic output (less diverse generation).
+    // * Higher values (e.g., 5.0 or more): More diverse and creative output.
     public var mirostatTau: Float        = 5.0
+    // This parameter defines the magnitude of the adjustment step applied to the token probabilities during each iteration of Mirostat sampling.
+    // * Larger mirostat_eta: Faster adjustments, but may overshoot the target entropy.
+    // * Smaller mirostat_eta: Slower but more stable convergence toward the target entropy.
+    // mirostat_eta works in conjunction with mirostat_lr to fine-tune the feedback loop
     public var mirostatEta: Float        = 0.1
-    public var penalizeNl: Bool          = false
+    /*
+    Parameter	    Values          Description	
+      mirostat	    0, 1, or 2  Mode of Mirostat (0 = disabled, 1 = version 1, 2 = version 2)	
+      mirostat_lr	0.1 to 1.0  Learning rate for the feedback mechanism, controlling how fast entropy corrections are applied	
+      mirostat_ent	Dynamic     Current entropy estimate (dynamic, often calculated internally)	
+      mirostat_tau	2.0 to 5.0  Target entropy level for balancing diversity and coherence	
+      mirostat_eta	0.1 to 0.5  Step size for entropy correction	
+    */
     public var seed: UInt32              = LLAMA_DEFAULT_SEED
 
     /// Path to a grammar file (optional).
     public var grammarPath: String       = ""
+    
+    /*
+     The dry run mechanism in token sampling is a technique used to penalize certain undesirable tokens during text
+     generation before making a final token selection. Its goal is to dynamically discourage or suppress the likelihood
+     of generating tokens that violate constraints, such as repetitions, low-probability tokens, or contextually
+     inappropriate words.
+
+     The “dry run” itself means that the model first evaluates the token probabilities (logits) and applies penalties
+     or constraints before finalizing the token selection. Think of it as a pre-check phase where the model decides
+     whether certain tokens should be penalized or excluded.
+     */
+    
+    /// Controls the severity of the penalty applied when a token violates constraints during sampling.
+    /// Higher values encourage the model to be more creative by exploring less frequently chosen tokens.
+    /// - Values like 1.0 (mild penalty) to 2.0 or higher (aggressive penalty) are used.
+    /// - Default: 1.0
+    public var dryMultiplier: Float       = 1.0
+
+    /// Specifies how many tokens can be generated without triggering a penalty based on the dry run constraints.
+    /// If the token violates some penalty rules (e.g., frequency, repetition), dry_base sets a baseline penalty before applying dry_multiplier.
+    /// - Range: Values around 0.5 to 1.0 are common
+    /// - Default: 1.0
+    public var dryBase: Float             = 1.0
+
+    /// Maximum allowed token sequence length for applying dry sampling adjustments.
+    /// If dry_allowed_length is too low, penalties will trigger too early, possibly interrupting coherent sequences.
+    /// Setting it too high may allow too much repetition or off-topic output before corrections occur.
+    /// - Range: Usually depends on the application, but could range from 5 tokens to 100 tokens.
+    /// - Default: 0
+    public var dryAllowedLength: Int32    = 0
+
+    /// Specifies the number of previously generated tokens to consider when applying the dry run penalty for repetition.
+    /// - Range: Common values range between 10 and 100 tokens.
+    /// - Default: 64
+    public var dryPenaltyLastN: Int32     = 64
+    
+    /// List of token sequences that, if encountered, will break the dry sampling chain.
+    /// - Default: ["\n", ":", "\"", "*"]
+    public var drySequenceBreakers: [String] = ["\n", ":", "\"", "*"]
+
+    /// Used in extended token constraints (XTC) sampling to limit certain tokens based on predefined conditions.
+    /// It defines the probability threshold for sampling from a constrained set of tokens.
+    /// Lower xtc_probability values allow more diversity, while higher values enforce stricter control over token selection based on constraints.
+    /// - Range:  Values between 0.5 and 1.0 are common.
+    /// - Default: 0.0 (disabled)
+    public var xtcProbability: Float      = 0.0
+
+    /// Represents the logit threshold for a token to be considered valid under extended token constraints (XTC).
+    /// Values vary depending on how aggressively you want to filter tokens:
+    /// - Range: Low values (e.g., -10): Loosely penalize tokens, allowing most to pass.
+    ///         Higher values (e.g., -1): Strongly restrict token choices.
+    /// - Default: 0.0 (disabled)
+    public var xtcThreshold: Float        = 0.0
+
+    /// Minimum number of tokens to keep in sampling operations (e.g. top-p, typical).
+    /// - Range: positive integer
+    /// - Default: 1
+    public var minKeep: Int32             = 1
+    
+    /// An array of (token, bias). If empty, no logit-bias is applied.
+    public var logitBias: [(token: llama_token, bias: Float)] = []
 
     public init() {}
+    
+    public func toString() -> String {
+        var result = "Sampling Parameters:\n"
+        
+        // Basic parameters
+        result += "Basic:\n"
+        result += "  Temperature: \(temp)\n"
+        result += "  Top-K: \(topK)\n"
+        result += "  Top-P: \(topP)\n"
+        result += "  Min-P: \(minP)\n"
+        result += "  Typical-P: \(typicalP)\n"
+        
+        // Dynamic temperature
+        if dynaTempRange > 0 {
+            result += "Dynamic Temperature:\n"
+            result += "  Range: \(dynaTempRange)\n"
+            result += "  Exponent: \(dynaTempExponent)\n"
+        }
+        
+        // Penalties
+        result += "Penalties:\n"
+        result += "  Last N: \(penaltyLastN)\n"
+        result += "  Repeat: \(penaltyRepeat)\n"
+        result += "  Frequency: \(penaltyFreq)\n"
+        result += "  Present: \(penaltyPresent)\n"
+        result += "  Penalize Newline: \(penalizeNl)\n"
+        
+        // Mirostat
+        result += "Mirostat:\n"
+        result += "  mirostat:     \(mirostat)\n"
+        if mirostat > 0 {
+            result += "  mirostat_tau: \(mirostatTau)\n"
+            result += "  mirostat_eta: \(mirostatEta)\n"
+        }
+        
+        // Dry run parameters
+        if dryAllowedLength > 0 {
+            result += "Dry Run:\n"
+            result += "  Multiplier: \(dryMultiplier)\n"
+            result += "  Base: \(dryBase)\n"
+            result += "  Allowed Length: \(dryAllowedLength)\n"
+            result += "  Penalty Last N: \(dryPenaltyLastN)\n"
+        }
+        
+        // XTC parameters
+        if xtcProbability > 0 || xtcThreshold > 0 {
+            result += "XTC:\n"
+            result += "  Probability: \(xtcProbability)\n"
+            result += "  Threshold: \(xtcThreshold)\n"
+        }
+        
+        // Other parameters
+        result += "Other:\n"
+        result += "  Previous tokens: \(nPrev)\n"
+        result += "  Min Keep: \(minKeep)\n"
+        result += "  Seed: \(seed)\n"
+        if !grammarPath.isEmpty {
+            result += "  Grammar Path: \(grammarPath)\n"
+        }
+        
+        return result
+    }
 }
 
 /// The sampler handle we return from `init_sampling`.
@@ -63,123 +208,208 @@ public final class SpmSamplerContext {
 
 /// Replacement for the original C++ `init_sampling(...)`.
 /// Instead of calling `common_sampler_init(...)`, we manually build a llama sampler chain.
-public func init_sampling(model: OpaquePointer?, params: SpmSamplingParams) -> SpmSamplerContext {
+public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: SpmSamplingParams) -> SpmSamplerContext {
     // Prepare the chain
     var sparams = llama_sampler_chain_default_params()
     sparams.no_perf = true
+    
+    // We store it in SpmSamplerContext
+    let samplerContext = SpmSamplerContext()
 
+    // Build up samplers in the chain:
+    
+    // Track sampler chain
+    var samplerChain = ["logits"]
+    
+    // 1) Create the sampler chain
     guard let sampling = llama_sampler_chain_init(sparams) else {
         // If somehow chain creation fails, return empty
         print("GPT_SPM.init_sampling() WARNING: Failed to initialize sampler chain")
         return SpmSamplerContext()
     }
-
-    // We store it in SpmSamplerContext
-    let samplerContext = SpmSamplerContext()
     samplerContext.sampler = sampling
+    
+    // 2) Add logit-bias sampler ---
+    // Convert Swift array to [llama_logit_bias]
+    print("GPT_SPM.init_sampling() Adding logit bias sampler")
+    // Convert Swift array of bias pairs into C-compatible llama_logit_bias structures.
+    let logitBiasArray = params.logitBias.map { pair in
+        llama_logit_bias(token: pair.token, bias: pair.bias)
+    }
+    let nBias = logitBiasArray.count
 
-    // Build up samplers in the chain:
+    // Allocate memory for the C array.
+    let pointer = UnsafeMutablePointer<llama_logit_bias>.allocate(capacity: nBias)
+    // Ensure memory is deinitialized and deallocated when done.
+    defer {
+        pointer.deinitialize(count: nBias)
+        pointer.deallocate()
+    }
+    // Copy the bias values into the allocated memory.
+    logitBiasArray.withUnsafeBufferPointer { buffer in
+        // Assumes that buffer.baseAddress is non-nil because the array is non-empty.
+        pointer.initialize(from: buffer.baseAddress!, count: nBias)
+    }
+    
+    // Get the vocabulary count.
+    let vocabCount = llama_vocab_n_tokens(vocab)
 
-    // 1) Repetition/presence penalties
-    if params.penaltyLastN != 0
-        && (params.penaltyRepeat != 1.0 || params.penaltyFreq != 0.0 || params.penaltyPresent != 0.0) {
-        print("GPT_SPM.init_sampling(). penaltyLastN: \(params.penaltyLastN), penaltyRepeat: \(params.penaltyRepeat), penaltyFreq: \(params.penaltyFreq), penaltyPresent: \(params.penaltyPresent)")
+    // Initialize and chain the logit-bias sampler if available.
+    if let logitBiasSampler = llama_sampler_init_logit_bias(vocabCount, Int32(nBias), pointer) {
+        print("GPT_SPM.init_sampling(): Adding logit-bias sampler with \(nBias) entries.")
+        llama_sampler_chain_add(sampling, logitBiasSampler)
+        samplerChain.append("logit-bias")
+    }
+
+    // 8) DRY Handle sampler chain differently based on the mirostat setting.
+    if params.mirostat == 0 {
+        // (A) --- Non-mirostat branch: add optional dry and xtc samplers.
+        
+        // 3) Repetition/presence penalties
+        print("GPT_SPM.init_sampling(). penaltyLastN: \(params.penaltyLastN), penaltyRepeat: \(params.penaltyRepeat), " +
+                "penaltyFreq: \(params.penaltyFreq), penaltyPresent: \(params.penaltyPresent)")
         if let sampler = llama_sampler_init_penalties(
+            //penalty_last_n,
             params.penaltyLastN,
+            // penalty_repeat
             params.penaltyRepeat,
+            // penalty_freq
             params.penaltyFreq,
+            // penalty_present
             params.penaltyPresent
         ) {
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("penalties")
         }
-    }
 
-    // 2) Top-k
-    if params.topK > 0 {
-        print("GPT_SPM.init_sampling(). topK: \(params.topK)")
-        if let sampler = llama_sampler_init_top_k(params.topK) {
+        // 4) Top-k
+        let topK = params.topK <= 0 ? 1 : Int32(params.topK)
+        print("GPT_SPM.init_sampling(). topK: \(topK)")
+        if let sampler = llama_sampler_init_top_k(topK) {
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("top-k")
         }
-    }
 
-    // 3) Typical
-    if params.typicalP < 0.9999 {
-        print("GPT_SPM.init_sampling(). typicalP: \(params.typicalP)")
-        if let sampler = llama_sampler_init_typical(params.typicalP, 1) {
+        // 5) Typical
+        let typicalP = params.typicalP > 0.9999 ? 0.9999 : params.typicalP
+        print("GPT_SPM.init_sampling(). typicalP: \(typicalP)")
+        if let sampler = llama_sampler_init_typical(typicalP, 1) {
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("typicalP")
         }
-    }
 
-    // 4) Top-p
-    if params.topP < 0.9999 {
-        print("GPT_SPM.init_sampling(). topP: \(params.topP)")
-        if let sampler = llama_sampler_init_top_p(params.topP, 1) {
+        // 6) Top-p
+        let topP = params.topP > 0.9999 ? 0.9999 : params.topP
+        print("GPT_SPM.init_sampling(). topP: \(topP)")
+        if let sampler = llama_sampler_init_top_p(topP, 1) {
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("top-p")
         }
-    }
 
-    // 5) Min-p
-    if params.minP > 0 && params.minP < 0.9999 {
-        print("GPT_SPM.init_sampling(). minP: \(params.minP)")
-        if let sampler = llama_sampler_init_min_p(params.minP, 1) {
+        // 7) Min-p
+        let minP = params.minP > 0.9999 || params.minP < 0 ? 0.9 : params.minP
+        print("GPT_SPM.init_sampling(). minP: \(minP)")
+        if let sampler = llama_sampler_init_min_p(minP, 1) {
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("min-p")
         }
-    }
 
-    // 6) Temperature
-    if params.temp > 0 {
-        print("GPT_SPM.init_sampling(). temp: \(params.temp)")
-        if let sampler = llama_sampler_init_temp(params.temp) {
-            llama_sampler_chain_add(sampling, sampler)
+        // Dry sampler: enable if dryAllowedLength > 0 (i.e. nonzero means enabled).
+        if params.dryAllowedLength > 0 {
+            print("GPT_SPM.init_sampling(). dry sampler: multiplier: \(params.dryMultiplier), base: \(params.dryBase), " +
+                  "allowed_length: \(params.dryAllowedLength), penalty_last_n: \(params.dryPenaltyLastN), breakers: \(params.drySequenceBreakers)")
+            let ctxTrain = (model != nil) ? llama_model_n_ctx_train(model) : 0
+            // Convert array of C strings to array of UnsafePointer<CChar>
+            let breakersCStrings = params.drySequenceBreakers.map { strdup($0) }
+            let breakersArray = breakersCStrings.map { ptr -> UnsafePointer<CChar>? in
+                guard let ptr = ptr else { return nil }
+                return UnsafePointer(ptr)
+            }
+            // Allocate buffer and copy pointers
+            let breakersPtr = UnsafeMutablePointer<UnsafePointer<CChar>?>.allocate(capacity: breakersArray.count + 1)
+            breakersArray.enumerated().forEach { breakersPtr[$0.0] = $0.1 }
+            breakersPtr[breakersArray.count] = nil  // Null terminate
+            
+            if let sampler = llama_sampler_init_dry(model, ctxTrain, params.dryMultiplier, params.dryBase,
+                                                    params.dryAllowedLength, params.dryPenaltyLastN,
+                                                    breakersPtr, breakersArray.count) {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("dry")
+            }
+            
+            // Clean up allocated memory after sampler is initialized
+            breakersPtr.deallocate()
+            // Free allocated C strings only once
+            breakersCStrings.forEach { ptr in
+                if let p = ptr { free(UnsafeMutableRawPointer(mutating: p)) }
+            }
         }
-    } else {
-        print("GPT_SPM.init_sampling(). use 'greedy' sampler")
-        // temp <= 0 => use "greedy" sampler
-        if let sampler = llama_sampler_init_greedy() {
-            llama_sampler_chain_add(sampling, sampler)
-        }
-    }
 
-    // 7) Mirostat
-    if params.mirostat == 1 {
+        // XTC sampler: enable if xtcProbability > 0.
+        if params.xtcProbability > 0 {
+            print("GPT_SPM.init_sampling(). xtc sampler: probability: \(params.xtcProbability), threshold: \(params.xtcThreshold), min_keep: \(params.minKeep)")
+            if let sampler = llama_sampler_init_xtc(params.xtcProbability, params.xtcThreshold, Int(params.minKeep), params.seed) {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("xtc")
+            }
+        }
+
+        // Temperature sampler using dynamic temperature parameters.
+        if params.temp > 0 {
+            print("GPT_SPM.init_sampling(). temp: \(params.temp) with dyn range: \(params.dynaTempRange) and exponent: \(params.dynaTempExponent)")
+            if let sampler = llama_sampler_init_temp_ext(params.temp, params.dynaTempRange, params.dynaTempExponent) {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("temp-ext")
+            }
+        } else {
+            print("GPT_SPM.init_sampling(). using 'greedy' sampler")
+            if let sampler = llama_sampler_init_greedy() {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("greedy")
+            }
+        }
+        
+        // Finally, add the dist (random) sampler.
+        if let finalSampler = llama_sampler_init_dist(params.seed) {
+            llama_sampler_chain_add(sampling, finalSampler)
+            samplerChain.append("dist")
+        }
+    } else if params.mirostat == 1 {
+        // (B) --- Mirostat v1: add temperature first, then mirostat.
+        if params.temp > 0 {
+            print("GPT_SPM.init_sampling(). temp (for mirostat): \(params.temp)")
+            if let sampler = llama_sampler_init_temp(params.temp) {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("temp-ext")
+            }
+        }
         let nVocab = (model != nil) ? llama_n_vocab(model) : 0
-        if let sampler = llama_sampler_init_mirostat(
-            nVocab,
-            params.seed,
-            params.mirostatTau,
-            params.mirostatEta,
-            100 // 'm' argument
-        ) {
-            print("GPT_SPM.init_sampling(). mirostat enabled")
+        if let sampler = llama_sampler_init_mirostat(nVocab, params.seed, params.mirostatTau, params.mirostatEta, 100) {
+            print("GPT_SPM.init_sampling(). mirostat enabled (v1)")
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("mirostat-v1")
         }
     } else if params.mirostat == 2 {
-        if let sampler = llama_sampler_init_mirostat_v2(
-            params.seed,
-            params.mirostatTau,
-            params.mirostatEta
-        ) {
+        // (C) --- Mirostat v2: add temperature then mirostat v2.
+        if params.temp > 0 {
+            print("GPT_SPM.init_sampling(). temp (for mirostat v2): \(params.temp)")
+            if let sampler = llama_sampler_init_temp(params.temp) {
+                llama_sampler_chain_add(sampling, sampler)
+                samplerChain.append("temp-ext")
+            }
+        }
+        if let sampler = llama_sampler_init_mirostat_v2(params.seed, params.mirostatTau, params.mirostatEta) {
             print("GPT_SPM.init_sampling(). mirostat v2 enabled")
             llama_sampler_chain_add(sampling, sampler)
+            samplerChain.append("mirostat-v2")
         }
     }
 
-    // 8) Dist (random) as the final sampler
-    if let finalSampler = llama_sampler_init_dist(params.seed) {
-        llama_sampler_chain_add(sampling, finalSampler)
-    }
+    print(params.toString())
     
-    // 9) Grammar
-    // use spm_llama_load_grammar instead
-    /*
-    if !params.grammarPath.isEmpty {
-        let grammar = params.grammarPath
-        let grammarSamplerPtr = llama_sampler_init_grammar(model, grammar, "root")
-        llama_sampler_chain_add(chainPtr, grammarSamplerPtr)
-        ctx.grammarSampler = grammarSamplerPtr
-    }
-    */
-
+    // Print the final sampler chain
+    print("GPT_SPM.init_sampling() Sampler chain: " + samplerChain.joined(separator: " -> "))
+    
     return samplerContext
 }
 

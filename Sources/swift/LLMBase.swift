@@ -39,6 +39,7 @@ public class LLMBase {
     public var outputRepeatTokens: [ModelToken] = []
     
     /// Holds the entire "past" token sequences (not always used).
+    /// public typealias ModelToken = Int32
     var past: [[ModelToken]] = []
     
     /// Number of tokens that have been fed (prompt + generated).
@@ -179,9 +180,6 @@ public class LLMBase {
     
     // MARK: - Session / State
     
-    public func ForgotLastNTokens(_ N: Int32) {
-    }
-    
     public func load_state(){
     }
     
@@ -241,9 +239,9 @@ public class LLMBase {
     /**
      Evaluates a single pass of the system prompt tokens if present.
      */
-    public func _eval_system_prompt(system_prompt: String? = nil) throws {
+    public func _eval_system_prompt(system_prompt: String? = nil) throws -> [ModelToken] {
         if let sp = system_prompt, !sp.isEmpty {
-            var systemPromptTokens: [ModelToken] = try TokenizePrompt(sp, .None)
+            var systemPromptTokens: [ModelToken] = try TokenizePrompt(sp + "\n", .None)
             var evalResult: Bool? = nil
             try ExceptionCather.catchException {
                 evalResult = try? self.llm_decode(inputBatch: &systemPromptTokens)
@@ -252,7 +250,9 @@ public class LLMBase {
                 throw ModelError.failedToEval
             }
             self.nPast += Int32(systemPromptTokens.count)
+            return systemPromptTokens
         }
+        return []
     }
 
     /**
@@ -311,7 +311,8 @@ public class LLMBase {
             if self.nPast + Int32(inputBatch.count) >= self.contextParams.context {
                 try self.KVShift()
                 // Optionally notify the callback about the context limit
-                _ = callback(LLMBase.CONTEXT_LIMIT_MARKER, 0)
+                // _ = callback(LLMBase.CONTEXT_LIMIT_MARKER, 0)
+                print("LLMBase.EvalInputTokensBatched: Context limit reached, KVShifted.")
             }
             
             var evalResult: Bool? = nil
@@ -321,6 +322,8 @@ public class LLMBase {
             if evalResult == false {
                 throw ModelError.failedToEval
             }
+            
+            // Update nPast
             self.nPast += Int32(evalCount)
         }
     }
@@ -393,26 +396,19 @@ public class LLMBase {
     // MARK: - Prompt Tokenization
     
     public func TokenizePrompt(_ input: String, _ style: ModelPromptStyle) throws -> [ModelToken] {
-        return try TokenizePromptWithSystem(input, "", style)
-    }
-
-    public func TokenizePromptWithSystem(_ input: String,
-                                         _ systemPrompt: String,
-                                         _ style: ModelPromptStyle) throws -> [ModelToken] {
         switch style {
         case .None:
             print("LLMBase.TokenizePromptWithSystem: use no template at all")
-            return LLMTokenize(input, systemPrompt: systemPrompt, use_template: false)
+            return LLMTokenize(input, use_template: false)
         case .Default:
             print("LLMBase.TokenizePromptWithSystem: use model default Jinja2 Chat Template")
-            return LLMTokenize(input, systemPrompt: systemPrompt)
+            return LLMTokenize(input)
         case .Custom:
             print("LLMBase.TokenizePromptWithSystem: use custom Jinja2 Chat Template")
-            return LLMTokenize(input,
-                               chatTemplate: self.contextParams.custom_prompt_format,
-                               systemPrompt: systemPrompt)
+            return LLMTokenize(input, chatTemplate: self.contextParams.custom_prompt_format)
         }
     }
+
 
     public func parse_skip_tokens(){
         self.contextParams.skip_tokens.append(self.llm_token_bos())
@@ -429,8 +425,8 @@ public class LLMBase {
      A base method to tokenize user inputs with optional system prompts and custom chat templates.
      Subclasses (like LLaMa) often override with specialized logic.
      */
-    public func LLMTokenize(_ input: String, chatTemplate: String? = nil, systemPrompt: String? = nil,
-                            add_bos: Bool? = nil, parse_special: Bool? = nil, use_template: Bool = true) -> [ModelToken] {
+    public func LLMTokenize(_ input: String, chatTemplate: String? = nil, add_bos: Bool? = nil,
+                            parse_special: Bool? = nil, use_template: Bool = true) -> [ModelToken] {
         return []
     }
     
@@ -474,8 +470,10 @@ public class LLMBase {
             let contextLength = Int32(self.contextParams.context)
             
             // (1) Evaluate system prompt once, if any
+            var system_prompt = system_prompt ?? self.contextParams.system_prompt
+            var systemPromptTokens = [ModelToken]()
             if self.nPast == 0 {
-                try self._eval_system_prompt(system_prompt: system_prompt)
+                systemPromptTokens = try self._eval_system_prompt(system_prompt: system_prompt)
             }
             // (2) Evaluate image embeddings if any
             try self._eval_img(img_path: img_path)
@@ -483,14 +481,17 @@ public class LLMBase {
             print("Past token count: \(self.nPast)/\(contextLength) (\(self.past.count))")
             
             // (3) Tokenize the user input (with system prompt if needed)
-            var inputTokens = try self.TokenizePromptWithSystem(input, system_prompt ?? "", self.contextParams.promptFormat)
+            var inputTokens = try self.TokenizePrompt(input, self.contextParams.promptFormat)
             if inputTokens.isEmpty && (img_path ?? "").isEmpty {
                 completion("", 0, ModelError.emptyInput)
                 return
             }
+            // Merge systemPromptTokens and inputTokens
+            inputTokens = systemPromptTokens + inputTokens
             
             let inputTokensCount = inputTokens.count
             print("Input tokens: \(inputTokens)")
+            print("[BEGIN AI]")
             
             if inputTokensCount > contextLength {
                 throw ModelError.inputTooLong
@@ -524,7 +525,7 @@ public class LLMBase {
                 // If token is EOG/EOS, break
                 if self.llm_token_is_eog(token: outputToken) {
                     completion_loop = false
-                    print("[EOG]")
+//                    print("[EOG]")
                     break
                 }
                 
@@ -597,7 +598,7 @@ public class LLMBase {
             let endTime = Date()
             let processingTime = endTime.timeIntervalSince(startTime) * 1000
             
-            print("Total tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
+            print("\n[END AI]\nTotal tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
             completion(fullOutput.joined(), processingTime, nil)
             
         } catch {

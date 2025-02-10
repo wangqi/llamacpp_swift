@@ -13,30 +13,15 @@ enum LlamaError: Error {
     case couldNotInitializeContext
 }
 
-func llama_batch_clear(_ batch: inout llama_batch) {
-    batch.n_tokens = 0
-}
 
-func llama_batch_add(_ batch: inout llama_batch, _ id: llama_token, _ pos: llama_pos, _ seq_ids: [llama_seq_id], _ logits: Bool) {
-    batch.token   [Int(batch.n_tokens)] = id
-    batch.pos     [Int(batch.n_tokens)] = pos
-    batch.n_seq_id[Int(batch.n_tokens)] = Int32(seq_ids.count)
-    for i in 0..<seq_ids.count {
-        batch.seq_id[Int(batch.n_tokens)]![Int(i)] = seq_ids[i]
-    }
-    batch.logits  [Int(batch.n_tokens)] = logits ? 1 : 0
-
-    batch.n_tokens += 1
-}
-
-actor LlamaLlamaContext {
+public class LlamaLlamaContext {
     private var model: OpaquePointer
     private var context: OpaquePointer
     private var vocab: OpaquePointer
     private var sampling: UnsafeMutablePointer<llama_sampler>
     private var batch: llama_batch
     private var tokens_list: [llama_token]
-    var is_done: Bool = false
+    public var is_done: Bool = false
 
     /// This variable is used to store temporarily invalid cchars
     private var temporary_invalid_cchars: [CChar]
@@ -67,7 +52,7 @@ actor LlamaLlamaContext {
         llama_backend_free()
     }
 
-    static func create_context(path: String) throws -> LlamaLlamaContext {
+    public static func create_context(path: String) throws -> LlamaLlamaContext {
         llama_backend_init()
         var model_params = llama_model_default_params()
 
@@ -98,7 +83,7 @@ actor LlamaLlamaContext {
         return LlamaLlamaContext(model: model, context: context)
     }
 
-    func model_info() -> String {
+    public func llama_model_info() -> String {
         let result = UnsafeMutablePointer<Int8>.allocate(capacity: 256)
         result.initialize(repeating: Int8(0), count: 256)
         defer {
@@ -122,10 +107,12 @@ actor LlamaLlamaContext {
         return batch.n_tokens;
     }
 
-    func completion_init(text: String) {
+    public func completion_init(text: String) {
         print("attempting to complete \"\(text)\"")
 
         tokens_list = tokenize(text: text, add_bos: true)
+        tokens_list = [198, 151644, 9707, 198, 151645]
+        print("token list: \(tokens_list)")
         temporary_invalid_cchars = []
 
         let n_ctx = llama_n_ctx(context)
@@ -138,7 +125,7 @@ actor LlamaLlamaContext {
         }
 
         for id in tokens_list {
-            print(String(cString: token_to_piece(token: id) + [0]))
+            print("token_id: \(id), token: \(String(cString: token_to_piece(token: id) + [0]))")
         }
 
         llama_batch_clear(&batch)
@@ -156,7 +143,7 @@ actor LlamaLlamaContext {
         n_cur = batch.n_tokens
     }
 
-    func completion_loop() -> String {
+    public func completion_loop() -> String {
         var new_token_id: llama_token = 0
 
         new_token_id = llama_sampler_sample(sampling, context, batch.n_tokens - 1)
@@ -183,7 +170,6 @@ actor LlamaLlamaContext {
         } else {
             new_token_str = ""
         }
-        print(new_token_str)
         // tokens_list.append(new_token_id)
 
         llama_batch_clear(&batch)
@@ -199,7 +185,7 @@ actor LlamaLlamaContext {
         return new_token_str
     }
 
-    func bench(pp: Int, tg: Int, pl: Int, nr: Int = 1) -> String {
+    public func bench(pp: Int, tg: Int, pl: Int, nr: Int = 1) -> String {
         var pp_avg: Double = 0
         var tg_avg: Double = 0
 
@@ -278,7 +264,7 @@ actor LlamaLlamaContext {
             tg_std = 0
         }
 
-        let model_desc     = model_info();
+        let model_desc     = llama_model_info();
         let model_size     = String(format: "%.2f GiB", Double(llama_model_size(model)) / 1024.0 / 1024.0 / 1024.0);
         let model_n_params = String(format: "%.2f B", Double(llama_model_n_params(model)) / 1e9);
         let backend        = "Metal";
@@ -297,7 +283,7 @@ actor LlamaLlamaContext {
         return result;
     }
 
-    func clear() {
+    public func clear() {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
         llama_kv_cache_clear(context)
@@ -341,5 +327,21 @@ actor LlamaLlamaContext {
             let bufferPointer = UnsafeBufferPointer(start: result, count: Int(nTokens))
             return Array(bufferPointer)
         }
+    }
+    
+    private func llama_batch_clear(_ batch: inout llama_batch) {
+        batch.n_tokens = 0
+    }
+
+    private func llama_batch_add(_ batch: inout llama_batch, _ id: llama_token, _ pos: llama_pos, _ seq_ids: [llama_seq_id], _ logits: Bool) {
+        batch.token   [Int(batch.n_tokens)] = id
+        batch.pos     [Int(batch.n_tokens)] = pos
+        batch.n_seq_id[Int(batch.n_tokens)] = Int32(seq_ids.count)
+        for i in 0..<seq_ids.count {
+            batch.seq_id[Int(batch.n_tokens)]![Int(i)] = seq_ids[i]
+        }
+        batch.logits  [Int(batch.n_tokens)] = logits ? 1 : 0
+
+        batch.n_tokens += 1
     }
 }

@@ -167,7 +167,6 @@ public class AI {
                 infoCallback: { str, obj in
                     infoCallBack?(str, obj)
                 },
-                stopWhenContextLimitReach: true,
                 completion: { finalResult, time, error in
                     if let error = error {
                         output = "[Error] \(error.localizedDescription)"

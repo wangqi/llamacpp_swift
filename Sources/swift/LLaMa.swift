@@ -532,11 +532,11 @@ public class LLaMa: LLMBase {
      */
     public override func llm_sample() -> ModelToken {
         // spm_llama_sampling_sample picks a token
-        let id = spm_llama_sampling_sample(ctxSampling: self.samplingContext, ctxMain: self.context, idx: -1, grammarFirst: false)
+        let next_token = spm_llama_sampling_sample(ctxSampling: self.samplingContext, ctxMain: self.context, idx: -1, grammarFirst: false)
         // Then accept that token so grammar or rep-penalty states are updated
         // It is already called in spm_llama_sampling_sample()
         // spm_llama_sampling_accept(ctxSampling: self.samplingContext, ctxMain: self.context, token: id, applyGrammar: true)
-        return id
+        return next_token
     }
     
     /**

@@ -200,6 +200,7 @@ public class LLMBase {
             
             var evalResult: Bool? = nil
             try ExceptionCather.catchException {
+                // Evaluate the initial tokens in the context
                 evalResult = try? self.llm_decode(inputBatch: &inputBatch)
             }
             if evalResult == false {
@@ -274,8 +275,6 @@ public class LLMBase {
        - system_prompt: (Optional) A system prompt for the context, usually run once at the start.
        - img_path: (Optional) An image path for generating embeddings.
        - infoCallback: A closure to receive debug or info metrics, e.g. token counts.
-       - stopWhenContextLimitReach: Whether to stop generation if the context is forced to shift.
-                                    Defaults to `true`.
      
      - Throws:
        - `ModelError.inputTooLong` if tokens exceed the context size.
@@ -288,8 +287,7 @@ public class LLMBase {
         _ evalCallback: @escaping ((String, Double) -> Bool),
         system_prompt: String? = nil,
         img_path: String? = nil,
-        infoCallback: ((String, Any) -> Void)? = nil,
-        stopWhenContextLimitReach: Bool = true
+        infoCallback: ((String, Any) -> Void)? = nil
     ) throws -> String {
         var finalOutput = ""
         let semaphore = DispatchSemaphore(value: 0)
@@ -316,7 +314,6 @@ public class LLMBase {
                 }
             },
             infoCallback: infoCallback,
-            stopWhenContextLimitReach: stopWhenContextLimitReach,
             completion: { output, time, error in
                 finalOutput = output
                 semaphore.signal()
@@ -356,10 +353,11 @@ public class LLMBase {
                             onPartialResult: @escaping (ChatStreamResult) -> Void,
                             shouldContinue: ((ChatStreamResult) -> Bool)? = nil,
                             infoCallback: ((String, Any) -> Void)? = nil,
-                            stopWhenContextLimitReach: Bool = true,
                             completion: @escaping (String, Double, Error?) -> Void) {
         do {
             let startTime = Date()
+            // Step 1: Tokenize the User Input using llama_tokenize()
+            // Tokenize the input string into a sequence of tokens that the model understands.
             var inputTokens = try InputToTokens(input, system_prompt: system_prompt, img_path: img_path)
             let inputTokensCount = inputTokens.count
             if inputTokens.isEmpty && (img_path ?? "").isEmpty {
@@ -367,7 +365,9 @@ public class LLMBase {
                 return
             }
             
-            // (4) Evaluate all prompt tokens in batched manner
+            // Step 2: Evaluate the Context (Prompt Tokens) using llama_decode()
+            // Feed the tokenized input to the model, starting with the prompt tokens, and evaluate the context.
+            // And evaluate the initial tokens in the context
             try self.EvalInputTokensBatched(inputTokens: &inputTokens) { _, _ in true }
             
             // Prepare for sampling loop
@@ -379,10 +379,16 @@ public class LLMBase {
             // We may call infoCallback if you want to pass debug info at any point
             infoCallback?("promptTokensUsed", inputTokensCount)
             
-            // (5) Repeatedly sample & decode single tokens until we hit an end condition
+            // Step 3: Sampling Process (llama_sampler_sample())
+            // Now that the context is evaluated, start generating tokens one-by-one using autoregressive decoding:
+            // • Use the logits from the last token.
+            // • Apply temperature scaling, top-k sampling, top-p sampling, or repetition penalties as necessary.
+            // • Sample the next token.
+            var callback_message: String = ""
             while completion_loop {
                 var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
+                    // llama_sampler_sample() selects the next token based on the probability distribution derived from the logits.
                     outputToken = self.llm_sample()
                 }
                 
@@ -394,6 +400,7 @@ public class LLMBase {
                 
                 // If token is EOG/EOS, break
                 if self.llm_token_is_eog(token: outputToken) {
+                    callback_message = ""
                     completion_loop = false
                     break
                 }
@@ -401,11 +408,11 @@ public class LLMBase {
                 // Potentially skip the token
                 var skipCallback = false
                 if !self.CheckSkipTokens(outputToken) {
-                    print("Skip token: \(outputToken)")
+                    print("LLaMa.CheckSkipTokens() Skip token: \(outputToken)")
                     skipCallback = true
                 }
                 
-                // Convert token to partial string
+                // Step 4: Convert Tokens Back to Output Text (llama_token_to_str())
                 if !skipCallback, let str = self.LLMTokenToStr(outputToken: outputToken) {
                     outputCache.append(str)
                     fullOutput.append(str)
@@ -416,32 +423,28 @@ public class LLMBase {
                         outputCache.removeAll()
                         onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
                     }
+                } else {
+                    print("LLMBase. Skip token: \(outputToken) because it failed to convert to string or skipCallback is \(skipCallback)")
                 }
                 
                 // Check if we've reached user-requested max tokens
                 let outputCount = fullOutput.count
                 if self.contextParams.n_predict != 0 && outputCount > self.contextParams.n_predict {
                     print(" * n_predict reached *")
+                    callback_message = "Reach the maximum prediction length: \(self.contextParams.n_predict)"
                     completion_loop = false
                     break
                 }
                 
-                // (5a) If still going, handle context limit
+                // If still going, handle context limit
                 if completion_loop {
                     if self.nPast >= self.contextParams.context - 2 {
                         // Attempt context shifting if feasible
                         try self.KVShift()
-                        onPartialResult(.success(ModelResult(choices: LLMBase.CONTEXT_LIMIT_MARKER, time: 0)))
-                        
-                        // If the user wants to stop when the context limit is reached
-                        if stopWhenContextLimitReach {
-                            print(" * context limit reached, stop generation *")
-                            completion_loop = false
-                            break
-                        }
+                        // onPartialResult(.success(ModelResult(choices: LLMBase.CONTEXT_LIMIT_MARKER, time: 0)))
                     }
                     
-                    // (5b) Single-token decode
+                    // Single-token decode
                     // Instead of building an array [outputToken], we can use the batch approach
                     // if the subclass supports it. But here's the simpler fallback:
                     var singleTokenBatch = [outputToken]

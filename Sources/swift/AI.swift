@@ -19,6 +19,23 @@ public enum ModelInference {
     case RWKV
 }
 
+public enum ModelError: Error {
+    case modelNotFound(String)
+    case inputTooLong
+    case failedToEval
+    case contextLimit
+    case emptyInput
+}
+
+public enum ModelPromptStyle {
+    case None
+    case Default
+    case Custom
+}
+
+public typealias ModelToken = Int32
+
+
 public class AI {
     
     var aiQueue = DispatchQueue(label: "AIAssistant-Main", qos: .userInitiated, attributes: .concurrent, autoreleaseFrequency: .inherit, target: nil)
@@ -52,22 +69,6 @@ public class AI {
             self.model = try? LLaMa_MModal(path: self.modelPath, contextParams: contextParams)
         default:
             self.model = try? LLaMa(path: self.modelPath, contextParams: contextParams)
-        // case .LLama_bin:
-        //     self.model = try? LLaMa_dadbed9(path: self.modelPath, contextParams: contextParams)
-        // case .GPTNeox:
-        //     self.model = try? GPTNeoX(path: self.modelPath, contextParams: contextParams)
-        // case .GPTNeox_gguf:
-        //     self.model = try? LLaMa(path: self.modelPath, contextParams: contextParams)
-        // case .GPT2:
-        //     self.model = try? GPT2(path: self.modelPath, contextParams: contextParams)
-        // case .Replit:
-        //     self.model = try? Replit(path: self.modelPath, contextParams: contextParams)
-        // case .Starcoder:
-        //     self.model = try? Starcoder(path: self.modelPath, contextParams: contextParams)
-        // case .Starcoder_gguf:
-        //     self.model = try? LLaMa(path: self.modelPath, contextParams: contextParams)
-        // case .RWKV:
-        //     self.model = try? RWKV(path: self.modelPath, contextParams: contextParams)
         }
     
     }
@@ -165,7 +166,9 @@ public class AI {
                     }
                 },
                 infoCallback: { str, obj in
-                    infoCallBack?(str, obj)
+                    DispatchQueue.main.async {
+                        infoCallBack?(str, obj)
+                    }
                 },
                 completion: { finalResult, time, error in
                     if let error = error {
@@ -181,7 +184,9 @@ public class AI {
             
             DispatchQueue.main.async {
                 self.flagResponding = false
-                completion(output)
+                DispatchQueue.main.async {
+                    completion(output)
+                }
             }
 
         }
@@ -697,18 +702,3 @@ public struct ModelSampleParams {
     }
 }
 
-public enum ModelError: Error {
-    case modelNotFound(String)
-    case inputTooLong
-    case failedToEval
-    case contextLimit
-    case emptyInput
-}
-
-public enum ModelPromptStyle {
-    case None
-    case Default
-    case Custom
-}
-
-public typealias ModelToken = Int32

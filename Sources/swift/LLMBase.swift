@@ -161,11 +161,6 @@ public class LLMBase {
     }
     
     public func KVShift() throws {
-        self.nPast = self.nPast / 2
-        try ExceptionCather.catchException {
-            var in_batch = [self.llm_token_eos()]
-            _ = try? self.llm_decode(inputBatch: &in_batch)
-        }
     }
     
     public func CheckSkipTokens(_ token: Int32) -> Bool {
@@ -384,7 +379,7 @@ public class LLMBase {
             // • Use the logits from the last token.
             // • Apply temperature scaling, top-k sampling, top-p sampling, or repetition penalties as necessary.
             // • Sample the next token.
-            var callback_message: String = ""
+            var callback_message: String?
             while completion_loop {
                 var outputToken: Int32 = -1
                 try ExceptionCather.catchException {
@@ -400,7 +395,6 @@ public class LLMBase {
                 
                 // If token is EOG/EOS, break
                 if self.llm_token_is_eog(token: outputToken) {
-                    callback_message = ""
                     completion_loop = false
                     break
                 }
@@ -431,7 +425,7 @@ public class LLMBase {
                 let outputCount = fullOutput.count
                 if self.contextParams.n_predict != 0 && outputCount > self.contextParams.n_predict {
                     print(" * n_predict reached *")
-                    callback_message = "Reach the maximum prediction length: \(self.contextParams.n_predict)"
+                    callback_message = "n_predict reached(\(self.contextParams.n_predict))"
                     completion_loop = false
                     break
                 }
@@ -471,7 +465,7 @@ public class LLMBase {
             let processingTime = endTime.timeIntervalSince(startTime) * 1000
             
             print("\n[END AI]\nTotal tokens: \(inputTokensCount + fullOutput.count) (\(inputTokensCount) -> \(fullOutput.count))")
-            completion(fullOutput.joined(), processingTime, nil)
+            completion(fullOutput.joined(), processingTime, callback_message)
             
         } catch {
             completion("", 0, error)

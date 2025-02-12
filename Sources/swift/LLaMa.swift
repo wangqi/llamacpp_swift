@@ -187,7 +187,6 @@ public class LLaMa: LLMBase {
         var spmParams = SpmSamplingParams()
 
         // Map all your old parameters into the new struct
-        spmParams.penaltyLastN        = sampleParams.repeat_last_n
         spmParams.topK                = sampleParams.top_k
         spmParams.topP                = sampleParams.top_p
         spmParams.minP                = sampleParams.min_p
@@ -200,9 +199,12 @@ public class LLaMa: LLMBase {
         spmParams.dynaTempRange       = 0.0
         spmParams.dynaTempExponent    = 1.0
 
+        // Pass repetition-related penalties:
+        spmParams.penaltyLastN        = sampleParams.repeat_last_n
         spmParams.penaltyRepeat       = sampleParams.repeat_penalty
         spmParams.penaltyFreq         = sampleParams.frequence_penalty
         spmParams.penaltyPresent      = sampleParams.presence_penalty
+        
         spmParams.mirostat            = sampleParams.mirostat
         spmParams.mirostatTau         = sampleParams.mirostat_tau
         spmParams.mirostatEta         = sampleParams.mirostat_eta

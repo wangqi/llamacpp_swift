@@ -227,7 +227,7 @@ public class LLaMa: LLMBase {
         spmParams.minKeep             = self.sampleParams.minKeep
 
         // Now call the updated function with the struct
-        self.samplingContext = init_sampling(model: model, vocab: vocab, params: spmParams)
+        self.samplingContext = init_sampling(model: model, vocab: vocab, context: context, params: spmParams)
     }
 
     /**

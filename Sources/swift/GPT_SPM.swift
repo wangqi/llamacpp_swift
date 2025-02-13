@@ -208,7 +208,10 @@ public final class SpmSamplerContext {
 
 /// Replacement for the original C++ `init_sampling(...)`.
 /// Instead of calling `common_sampler_init(...)`, we manually build a llama sampler chain.
-public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: SpmSamplingParams) -> SpmSamplerContext {
+public func init_sampling(model: OpaquePointer?,
+                          vocab: OpaquePointer?,
+                          context: OpaquePointer?,
+                          params: SpmSamplingParams) -> SpmSamplerContext {
     // Prepare the chain
     var sparams = llama_sampler_chain_default_params()
     sparams.no_perf = true
@@ -383,7 +386,7 @@ public func init_sampling(model: OpaquePointer?, vocab: OpaquePointer?, params: 
                 samplerChain.append("temp-ext")
             }
         }
-        let nVocab = (model != nil) ? llama_n_vocab(model) : 0
+        let nVocab = (context != nil) ? llama_n_vocab(context) : 0
         if let sampler = llama_sampler_init_mirostat(nVocab, params.seed, params.mirostatTau, params.mirostatEta, 100) {
             print("GPT_SPM.init_sampling(). mirostat enabled (v1)")
             llama_sampler_chain_add(sampling, sampler)

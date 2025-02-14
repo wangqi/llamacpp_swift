@@ -141,8 +141,6 @@ public class AI {
                     switch result {
                     case .success(let modelResult):
                         if self.flagExit {
-                            // Reset flag
-                            self.flagExit = false
                             semaphore.signal()
                             return
                         }
@@ -184,6 +182,7 @@ public class AI {
             
             DispatchQueue.main.async {
                 self.flagResponding = false
+                self.flagExit = false // Reset flag after completion
                 DispatchQueue.main.async {
                     completion(output)
                 }

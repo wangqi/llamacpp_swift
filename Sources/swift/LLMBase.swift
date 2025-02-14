@@ -415,7 +415,14 @@ public class LLMBase {
                     if outputCache.count >= self.contextParams.predict_cache_length {
                         let chunk = outputCache.joined()
                         outputCache.removeAll()
-                        onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
+                        let result = ModelResult(choices: chunk, time: 0)
+                        onPartialResult(.success(result))
+                        
+                        // Check if we should continue after sending partial result
+                        if let shouldContinue = shouldContinue, !shouldContinue(.success(result)) {
+                            completion_loop = false
+                            break
+                        }
                     }
                 } else {
                     print("LLMBase. Skip token: \(outputToken) because it failed to convert to string or skipCallback is \(skipCallback)")
@@ -428,6 +435,15 @@ public class LLMBase {
                     callback_message = "n_predict reached(\(self.contextParams.n_predict))"
                     completion_loop = false
                     break
+                }
+                
+                // Check if we should continue after processing this token
+                if let shouldContinue = shouldContinue {
+                    let currentResult = ModelResult(choices: fullOutput.joined(), time: Date().timeIntervalSince(startTime))
+                    if !shouldContinue(.success(currentResult)) {
+                        completion_loop = false
+                        break
+                    }
                 }
                 
                 // If still going, handle context limit

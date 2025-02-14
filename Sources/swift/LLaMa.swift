@@ -20,6 +20,7 @@ public class LLaMa: LLMBase {
     public var samplingContext: SpmSamplerContext?
     public var vocab: OpaquePointer?
     public var batch: llama_batch?
+    public var batchSize: Int = 0
     public var hardware_arch: String = ""
     public private(set) var chatTemplate: ChatTemplate?
     
@@ -143,6 +144,7 @@ public class LLaMa: LLMBase {
         //
         // llama_batch_init(int32_t n_tokens_alloc, int32_t embd, int32_t n_seq_max)
         self.batch = llama_batch_init(sampleParams.n_batch, 0, 1)
+        self.batchSize = Int(sampleParams.n_batch)
         
         // Initialize sampling context
         init_sampling_param()
@@ -567,23 +569,29 @@ public class LLaMa: LLMBase {
             return false
         }
         
-        // 1) Clear the global batch (inout reference to self.batch!)
-        llama_batch_clear(&self.batch!)
-        
-        // 2) Add each token from inputBatch into the global batch
-        //    Mark the last token's logits = true (1) if you want to compute logits for it.
-        for (idx, token) in inputBatch.enumerated() {
-            let isLast = (idx == inputBatch.count - 1)
-            let position = self.nPast + Int32(idx)
-            // seq_ids array, often [0] if single sequence
-            // true if we want logits for the last token
-            llama_batch_add(&self.batch!, token, position, [0], isLast)
-        }
-        
-        // 3) Perform the decode using llama_decode
-        if llama_decode(self.context, self.batch!) != 0 {
-            print("failed to evaluate llama!")
-            return false
+        // Process tokens in chunks of size batchCapacity
+        let totalTokens = inputBatch.count
+        for chunkStart in stride(from: 0, to: totalTokens, by: self.batchSize) {
+            // Determine the range for the current chunk
+            let chunkEnd = min(chunkStart + self.batchSize, totalTokens)
+            let chunk = inputBatch[chunkStart..<chunkEnd]
+            // Clear the global batch before processing a new chunk
+            llama_batch_clear(&self.batch!)
+            
+            // Add each token from inputBatch into the global batch
+            // Mark the last token's logits = true (1) if you want to compute logits for it.
+            for (idx, token) in chunk.enumerated() {
+                // Mark as last token if it's the last of the entire inputBatch
+                let isLast = (chunkStart + idx == totalTokens - 1)
+                let position = self.nPast + Int32(chunkStart + idx)
+                llama_batch_add(&self.batch!, token, position, [0], isLast)
+            }
+            
+            // Process the current chunk using llama_decode
+            if llama_decode(self.context, self.batch!) != 0 {
+                print("failed to evaluate llama!")
+                return false
+            }
         }
         
         return true

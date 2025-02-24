@@ -472,7 +472,6 @@ public class LLMBase {
             // If anything remains in outputCache, flush it
             if !outputCache.isEmpty {
                 let chunk = outputCache.joined()
-                fullOutput.append(chunk)
                 onPartialResult(.success(ModelResult(choices: chunk, time: 0)))
             }
             

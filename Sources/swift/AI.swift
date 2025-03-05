@@ -19,12 +19,81 @@ public enum ModelInference {
     case RWKV
 }
 
-public enum ModelError: Error {
+public enum ModelError: Error, LocalizedError, CustomDebugStringConvertible {
     case modelNotFound(String)
     case inputTooLong
     case failedToEval
     case contextLimit
     case emptyInput
+
+    // User-friendly description
+    public var errorDescription: String? {
+        switch self {
+        case .modelNotFound(let name):
+            return "Model '\(name)' not found."
+        case .inputTooLong:
+            return "The input text is too long."
+        case .failedToEval:
+            return "Model evaluation failed."
+        case .contextLimit:
+            return "Exceeded model context limit."
+        case .emptyInput:
+            return "Input cannot be empty."
+        }
+    }
+
+    // Suggest possible fixes
+    public var recoverySuggestion: String? {
+        switch self {
+        case .modelNotFound:
+            return "Ensure the model is installed and the correct name is provided."
+        case .inputTooLong:
+            return "Try reducing the input length."
+        case .failedToEval:
+            return "Check model compatibility and retry."
+        case .contextLimit:
+            return "Reduce prompt size or use a smaller model."
+        case .emptyInput:
+            return "Provide valid input text."
+        }
+    }
+
+    // Reason for failure
+    public var failureReason: String? {
+        switch self {
+        case .modelNotFound:
+            return "The requested model does not exist."
+        case .inputTooLong:
+            return "Input exceeds the model’s processing limit."
+        case .failedToEval:
+            return "Model execution encountered an error."
+        case .contextLimit:
+            return "The model ran out of context space."
+        case .emptyInput:
+            return "No input was provided."
+        }
+    }
+
+    // Debug description (for logging)
+    public var debugDescription: String {
+        switch self {
+        case .modelNotFound(let name):
+            return "ModelError: modelNotFound - \(name)"
+        case .inputTooLong:
+            return "ModelError: inputTooLong"
+        case .failedToEval:
+            return "ModelError: failedToEval"
+        case .contextLimit:
+            return "ModelError: contextLimit"
+        case .emptyInput:
+            return "ModelError: emptyInput"
+        }
+    }
+
+    // Standard localized description
+    public var localizedDescription: String {
+        return errorDescription ?? "An unknown error occurred."
+    }
 }
 
 public enum ModelPromptStyle {

@@ -199,6 +199,7 @@ public class LLMBase {
                 evalResult = try? self.llm_decode(inputBatch: &inputBatch)
             }
             if evalResult == false {
+                print("Failed to evaluate input tokens")
                 throw ModelError.failedToEval
             }
             

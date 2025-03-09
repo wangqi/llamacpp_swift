@@ -35,7 +35,6 @@ var linkerSettings: [LinkerSetting] = [
     .linkedFramework("Metal"),
     .linkedFramework("MetalKit"),
     .linkedFramework("MetalPerformanceShaders"),
-    .unsafeFlags(["-rpath", "@executable_path/Frameworks"]),
     .linkedFramework("llama", .when(platforms: [.iOS, .macOS]))
 ]
 
@@ -50,7 +49,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/wangqi/Jinja", branch: "main"),
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0"),
+        //.package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
     ],
     targets: [

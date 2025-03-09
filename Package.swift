@@ -55,7 +55,7 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "llama",
-            path: "../llama.cpp/build-apple/llama.xcframework"  // Adjust the relative path
+            path: "../llama.cpp/build-apple/llama.xcframework"
         ),
         .target(
             name: "llamacpp_swift_cpp",

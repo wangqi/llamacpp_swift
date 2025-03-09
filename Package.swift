@@ -35,6 +35,8 @@ var linkerSettings: [LinkerSetting] = [
     .linkedFramework("Metal"),
     .linkedFramework("MetalKit"),
     .linkedFramework("MetalPerformanceShaders"),
+    .unsafeFlags(["-rpath", "@executable_path/Frameworks"]),
+    .linkedFramework("llama", .when(platforms: [.iOS, .macOS]))
 ]
 
 let package = Package(
@@ -47,16 +49,19 @@ let package = Package(
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
-        .package(url: "https://github.com/wangqi/llama.cpp.git", branch: "master"),
         .package(url: "https://github.com/wangqi/Jinja", branch: "main"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
     ],
     targets: [
+        .binaryTarget(
+            name: "llama",
+            path: "../llama.cpp/build-apple/llama.xcframework"  // Adjust the relative path
+        ),
         .target(
             name: "llamacpp_swift_cpp",
             dependencies: [
-              .product(name: "llama", package: "llama.cpp")
+                "llama" // Use the xcframework instead of the Git package
             ],
             path: "Sources/cpp",
             sources: [
@@ -75,7 +80,7 @@ let package = Package(
               name: "llamacpp_swift",
               dependencies: [
                 "llamacpp_swift_cpp",
-                .product(name: "llama", package: "llama.cpp"),
+                "llama", // Use the xcframework instead of the Git package
                 .product(name: "Jinja", package: "Jinja"),
                 .product(name: "Logging", package: "swift-log"),
               ],

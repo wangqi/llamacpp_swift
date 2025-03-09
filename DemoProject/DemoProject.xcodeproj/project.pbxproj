@@ -13,18 +13,13 @@
 		151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E82B696C2A0074FF35 /* MetalKit.framework */; };
 		151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151746E92B696C2A0074FF35 /* MetalPerformanceShaders.framework */; };
 		3008753B2D4F106100567B95 /* MainLoopState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3008753A2D4F106100567B95 /* MainLoopState.swift */; };
-		3008753E2D4F17CA00567B95 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 3008753D2D4F17CA00567B95 /* llama */; };
-		300875412D4F191200567B95 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 300875402D4F191200567B95 /* llama */; };
-		300875442D4F19BC00567B95 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 300875432D4F19BC00567B95 /* llama */; };
-		3031EAD02D5A08D9006E743D /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 3031EACF2D5A08D9006E743D /* llamacpp_swift */; };
-		3036A1882D4C52E0004F1CDB /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 3036A1872D4C52E0004F1CDB /* llama */; };
 		3041EE4A2D478E44004FAAA1 /* TestCombineStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE472D478E44004FAAA1 /* TestCombineStream.swift */; };
 		3041EE4B2D478E44004FAAA1 /* TestPredict.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE482D478E44004FAAA1 /* TestPredict.swift */; };
 		3041EE4C2D478E44004FAAA1 /* TestCallbackStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE462D478E44004FAAA1 /* TestCallbackStream.swift */; };
 		3041EE4D2D478E44004FAAA1 /* TestStructuredStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */; };
+		3042372E2D7D332D00D71D9A /* Jinja in Frameworks */ = {isa = PBXBuildFile; productRef = 3042372D2D7D332D00D71D9A /* Jinja */; };
+		30453F3B2D7D479F00A06D3F /* llamacpp_swift in Frameworks */ = {isa = PBXBuildFile; productRef = 30453F3A2D7D479F00A06D3F /* llamacpp_swift */; };
 		30CB3B572D50CF33002D3118 /* TestLLamacppswift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30CB3B562D50CF33002D3118 /* TestLLamacppswift.swift */; };
-		30D840AE2D4CD69100D3B586 /* Jinja in Frameworks */ = {isa = PBXBuildFile; productRef = 30D840AD2D4CD69100D3B586 /* Jinja */; };
-		30FBF43D2D59F2690002EC90 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 30FBF43C2D59F2690002EC90 /* llama */; };
 		30FBF4422D59F5B80002EC90 /* TestLibllama.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FBF4412D59F5B80002EC90 /* TestLibllama.swift */; };
 		30FCC5912D54AFE2001A58B0 /* TestSimpleChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FCC5902D54AFE2001A58B0 /* TestSimpleChat.swift */; };
 /* End PBXBuildFile section */
@@ -54,6 +49,7 @@
 		3041EE482D478E44004FAAA1 /* TestPredict.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestPredict.swift; sourceTree = "<group>"; };
 		3041EE492D478E44004FAAA1 /* TestStructuredStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStructuredStream.swift; sourceTree = "<group>"; };
 		30CB3B562D50CF33002D3118 /* TestLLamacppswift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestLLamacppswift.swift; sourceTree = "<group>"; };
+		30D6A21B2D7C8FEE0057A69A /* llama.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:2657Y4N228:Qi Wang"; lastKnownFileType = wrapper.xcframework; name = llama.xcframework; path = "../../llama.cpp/build-apple/llama.xcframework"; sourceTree = "<group>"; };
 		30FBF4412D59F5B80002EC90 /* TestLibllama.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestLibllama.swift; sourceTree = "<group>"; };
 		30FCC5902D54AFE2001A58B0 /* TestSimpleChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSimpleChat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -63,14 +59,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				300875442D4F19BC00567B95 /* llama in Frameworks */,
-				300875412D4F191200567B95 /* llama in Frameworks */,
-				3008753E2D4F17CA00567B95 /* llama in Frameworks */,
-				30FBF43D2D59F2690002EC90 /* llama in Frameworks */,
-				3036A1882D4C52E0004F1CDB /* llama in Frameworks */,
-				3031EAD02D5A08D9006E743D /* llamacpp_swift in Frameworks */,
-				30D840AE2D4CD69100D3B586 /* Jinja in Frameworks */,
+				3042372E2D7D332D00D71D9A /* Jinja in Frameworks */,
 				151746EC2B696C2A0074FF35 /* MetalPerformanceShaders.framework in Frameworks */,
+				30453F3B2D7D479F00A06D3F /* llamacpp_swift in Frameworks */,
 				151746EB2B696C2A0074FF35 /* MetalKit.framework in Frameworks */,
 				151746EA2B696C2A0074FF35 /* Metal.framework in Frameworks */,
 				151746E62B696C080074FF35 /* Accelerate.framework in Frameworks */,
@@ -116,6 +107,7 @@
 		151746E22B696A950074FF35 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				30D6A21B2D7C8FEE0057A69A /* llama.xcframework */,
 				151746E72B696C2A0074FF35 /* Metal.framework */,
 				151746E82B696C2A0074FF35 /* MetalKit.framework */,
 				151746E92B696C2A0074FF35 /* MetalPerformanceShaders.framework */,
@@ -141,13 +133,8 @@
 			);
 			name = DemoProject;
 			packageProductDependencies = (
-				3036A1872D4C52E0004F1CDB /* llama */,
-				30D840AD2D4CD69100D3B586 /* Jinja */,
-				3008753D2D4F17CA00567B95 /* llama */,
-				300875402D4F191200567B95 /* llama */,
-				300875432D4F19BC00567B95 /* llama */,
-				30FBF43C2D59F2690002EC90 /* llama */,
-				3031EACF2D5A08D9006E743D /* llamacpp_swift */,
+				3042372D2D7D332D00D71D9A /* Jinja */,
+				30453F3A2D7D479F00A06D3F /* llamacpp_swift */,
 			);
 			productName = DemoProject;
 			productReference = 151746D72B6968EA0074FF35 /* DemoProject */;
@@ -178,9 +165,8 @@
 			);
 			mainGroup = 151746CE2B6968EA0074FF35;
 			packageReferences = (
-				30D840AC2D4CD69100D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */,
-				30FBF43B2D59F2690002EC90 /* XCLocalSwiftPackageReference "../../llama.cpp" */,
-				3031EACE2D5A08D9006E743D /* XCLocalSwiftPackageReference "../../llamacpp_swift" */,
+				3042372C2D7D332D00D71D9A /* XCLocalSwiftPackageReference "../../Jinja" */,
+				30453F392D7D479F00A06D3F /* XCLocalSwiftPackageReference "../../llamacpp_swift" */,
 			);
 			productRefGroup = 151746D82B6968EA0074FF35 /* Products */;
 			projectDirPath = "";
@@ -335,6 +321,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = Y4G353X6Q5;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FRAMEWORK_SEARCH_PATHS = "/Users/wangqi/disk/projects/ai/ios/aiassistant/thirdparty/llama.cpp/build-apple/llama.xcframework";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 			};
@@ -346,6 +337,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = Y4G353X6Q5;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FRAMEWORK_SEARCH_PATHS = "/Users/wangqi/disk/projects/ai/ios/aiassistant/thirdparty/llama.cpp/build-apple/llama.xcframework";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 			};
@@ -375,48 +371,24 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		3031EACE2D5A08D9006E743D /* XCLocalSwiftPackageReference "../../llamacpp_swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../llamacpp_swift;
-		};
-		30D840AC2D4CD69100D3B586 /* XCLocalSwiftPackageReference "../../Jinja" */ = {
+		3042372C2D7D332D00D71D9A /* XCLocalSwiftPackageReference "../../Jinja" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Jinja;
 		};
-		30FBF43B2D59F2690002EC90 /* XCLocalSwiftPackageReference "../../llama.cpp" */ = {
+		30453F392D7D479F00A06D3F /* XCLocalSwiftPackageReference "../../llamacpp_swift" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../llama.cpp;
+			relativePath = ../../llamacpp_swift;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3008753D2D4F17CA00567B95 /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = llama;
-		};
-		300875402D4F191200567B95 /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = llama;
-		};
-		300875432D4F19BC00567B95 /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = llama;
-		};
-		3031EACF2D5A08D9006E743D /* llamacpp_swift */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = llamacpp_swift;
-		};
-		3036A1872D4C52E0004F1CDB /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = llama;
-		};
-		30D840AD2D4CD69100D3B586 /* Jinja */ = {
+		3042372D2D7D332D00D71D9A /* Jinja */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Jinja;
 		};
-		30FBF43C2D59F2690002EC90 /* llama */ = {
+		30453F3A2D7D479F00A06D3F /* llamacpp_swift */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = llama;
+			productName = llamacpp_swift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -309,13 +309,13 @@ struct MainCPP {
         let context_params = llama_context_default_params()
         let model_params   = llama_model_default_params()
         
-        var spmParams = SpmSamplingParams()
+        let spmParams = SpmSamplingParams()
         // Initialize the llama backend
         llama_backend_init()
         let model = llama_model_load_from_file(path, model_params)
         let vocab = llama_model_get_vocab(model) // self.model is the same pointer if not nil
-        let ctx_sampling = init_sampling(model: model, vocab: vocab, params: spmParams)
         let context = llama_init_from_model(model, context_params)
+        let ctx_sampling = init_sampling(model: model, vocab: vocab, context:context, params: spmParams)
         //logits init
         var inputs = [llama_vocab_bos(vocab), llama_vocab_eos(vocab)]
         llama_decode(context, llama_batch_get_one(&inputs, Int32(inputs.count)))
